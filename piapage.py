@@ -2,38 +2,41 @@
 ################################################################################
 # Class PiaPage
 #
-# A class and methods to handle the reading and interpretation of web pages at
-# the Planetary Photojournal, https://photojournal.jpl.nasa.gov.
+# A class that customizes the GalleryPage interface for NASA press release web
+# pages from the Planetary Photojournal, https://photojournal.jpl.nasa.gov.
 #
 # Andrew Lin & Mark Showalter
 ################################################################################
 
-### It's usually a good idea to have a header at the top of any file.
-### The first line is needed if we want to run unit tests from the command line.
+from gallerypage import GalleryPage
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, ResultSet
 import requests
 import os
 import json
+import lxml
+import re
 
-### Adding blank lines between methods, classes and other large sections of code
-### is recommended. Headers are useful to separate large chunks of code; see an
-### example below.
+from piapage_background_strings import BACKGROUND_STRINGS
+from mission_full_names    import MISSION_FULL_NAMES
+from host_full_names       import HOST_FULL_NAMES
+from instrument_full_names import INSTRUMENT_FULL_NAMES
+from target_full_names     import TARGET_FULL_NAMES
 
-class PiaPage(object):  ### always derive classes from object
+PARSER = 'lxml'
 
-### Best to define constants like this at the top. If the URL every changes
-### you only need to change one line and you don't need to go looking for it.
+PIA_REGEX = re.compile(r'PIA[0-9]{5}')
+YMD_REGEX = re.compile(r'[12][0-9]{3}-[01][0-9]-[0-3][0-9]$')
 
+class PiaPage(GalleryPage):
+
+    # Class constants
     PIA_URL = "https://photojournal.jpl.nasa.gov/catalog/"
     MISSING_PAGE_TEXT = 'No images in our database met your search criteria'
     PIAROOT_ENVNAME = 'PIAPATH'
+    _PIAROOT = None
 
-### Note I added a way to pass the root directory of the HTML source tree into
-### the constructor. You don't need it if you are getting the HTML over the web
-### but will need it for finding a local copy.
-
-    def __init__(self, src, piaroot=None, overwrite=False):
+    def __init__(self, src, overwrite=False):
         """ The constructor of this class. Requires a source. Contains
         attributes source, html, soup, title, credit, and caption.
 
@@ -46,79 +49,194 @@ class PiaPage(object):  ### always derive classes from object
                         4. The URL of a PIA page. In this case, the HTML is
                            saved as a local file for future, quick access.
 
-            piaroot     The root directory of the PIA file tree. The file path
-                        is piaroot/PIAnnxxx/PIAnnnnn.txt. Here 'nnnnn' is
-                        replaced by the pia number, whereas the directory name
-                        uses the first two digits of the pia number followed by
-                        literal 'xxx'. This prevents directories from growing
-                        to more than 1000 files.
-
             overwrite   True to overwrite a local copy of the HTML source with
                         one pulled from the website; False to leave any local
                         copy unchanged
         """
 
-### It's a PEP recommendation and also just good practice to wrap lines at 80
-### characters or less. Sometimes there are exceptions.
-
         self.source = src
-        self.piaroot = PiaPage.get_piaroot(piaroot)
-        self.HTML = PiaPage.get_HTMLfromPIACode(src, self.piaroot, overwrite)   ### Changed to a static function
-        self.SOUP = BeautifulSoup(self.HTML, 'html.parser')     ### Changed to a direct call
 
-### General comment. If something _can_ be a static function, then it should be
-### a static function. Static functions are easier to test because they can
-### stand by themselves--you don't need to create an object in order to test the
-### function.
+        self.id = PiaPage.get_id(self.source)
+                            # Unique identifier for this product, e.g., PIA12345
+        self.origin_url = PiaPage.url_from_source(self.source)
 
-        self.TITLE = self.get_Title()
-        self.CREDIT = self.get_Credit()
-        self.CAPTION = self.get_Caption()
-        self.information = self.get_Information()
+        # Read the page as HTML
+        self.html = PiaPage.get_html_for_id(self.source, overwrite)
+
+#       The default parser cannot handle some PIA pages. lxml does.
+#       self.soup = BeautifulSoup(self.html, 'html.parser')
+        self.soup = BeautifulSoup(self.html, PARSER)
+
+        # Validate the PIA page
+        if len(self.soup.find_all('dt')) != 3:
+            raise IOError("PIA page does not contain three description tags")
+
+        text = self.soup.find_all('dt')[0].text.strip()
+        if 'Caption' not in text:
+            raise IOError("No caption found in PIA page")
+
+        text = self.soup.find_all('dt')[1].text.strip()
+        if not text.startswith("Image Credit:"):
+            raise IOError("No image credit found in PIA page")
+
+        text = self.soup.find_all('dt')[2].text.strip()
+        if not text.startswith("Image Addition Date:"):
+            raise IOError("No image addition date found in PIA page")
+
+        text = self.soup.find_all('b')[0].text.lstrip()
+        if text[:8] != self.id:
+            raise IOError("Invalid title in PIA page: " + text)
+
+        # Extract the caption and separate it from the background info
+        (self.caption_soup,
+         self.background_soup) = self.get_caption_and_background()
+
+        self.title = self.get_title()
+        self.credit = self.get_credit()
+        self.release_date = self.get_release_date()
+        self.xrefs = self.find_xrefs()
+
+        # Get key information from the PIA page's table
+        self.pia_table = self.load_pia_table()
+        missions    = self.pia_table.get('Mission', [])
+        hosts       = self.pia_table.get('Spacecraft', [])
+        instruments = self.pia_table.get('Instrument', [])
+        targets     = self.pia_table.get('Target Name', [])
+
+        if targets and 'Sol' in targets[0]:
+            targets[0] = 'Sun'
+
+        # Commone error in pages
+        if 'Comet' in targets and 'Rosetta' in missions:
+            targets[targets.index('Comet')] = '67P/Churyumov-Gerasimenko'
+
+        # Take the first entry as primary
+        if missions:
+            missions = [MISSION_FULL_NAMES.get(m, m) for m in missions]
+            missions = [str(m) for m in missions]
+            self._mission = missions[0]
+
+        if hosts:
+            hosts = [HOST_FULL_NAMES.get(h.lower(), h) for h in hosts]
+            hosts = [str(h) for h in hosts]
+            self._host = hosts[0]
+
+        if instruments:
+            instruments = [INSTRUMENT_FULL_NAMES.get(i.lower(), i)
+                           for i in instruments]
+            instruments = [str(i) for i in instruments]
+            self._instrument = instruments[0]
+
+        if targets:
+            targets = [TARGET_FULL_NAMES.get(t.lower(), t) for t in targets]
+            targets = [str(t) for t in targets]
+            self._target = targets[0]
+
+        planets = self.pia_table.get('Is a satellite of', [])
+        if planets and 'Sol' in planets[0]:
+            planets = self.pia_table.get('Target Name', [])
+            planets = [str(p) for p in planets]
+            planets = [p for p in planets if p in GalleryPage.PLANET_NAMES]
+
+            if planets:
+                self._planet = planets[0]
+
+        # Make sure the list attributes are complete
+        if missions:
+            self._missions = list(set(self.missions + missions))
+            self._missions.sort()
+
+        if hosts:
+            self._hosts = list(set(self.hosts + hosts))
+            self._hosts.sort()
+
+            # Use the mission as the host if necessary
+            if missions and self._missions and not self._hosts:
+                self._hosts = self._missions
+
+        if instruments:
+            self._instruments = list(set(self.instruments + instruments))
+            self._instruments.sort()
+
+        if targets:
+            self._targets = list(set(self.targets + targets))
+            self._targets.sort()
+
+        if planets:
+            self._planets = list(set(self.planets + planets))
+            self._planets.sort()
+
+    ############################################################################
+    # piaroot() returns the path to the root directory for PIA text files. It
+    # is filled in internally the first time it is used.
+    # 
+    # The path to the local copy of a particular PIA text file is
+    #   piaroot/PIAnnxxx/PIAnnnnn.txt
+    # where 'nnnnn' is replaced by the pia number. The directory name uses the
+    # first two digits of the pia number followed by literal 'xxx'. This
+    # prevents directories from growing to more than 1000 files.
+    ############################################################################
 
     @staticmethod
-    def get_piaroot(piaroot=None):
+    def piaroot():
         """Return the root directory for PIA text files. Search via an
-        environment variable if it is None."""
+        environment variable if it is undefined."""
 
-        if piaroot is None:
+        if not PiaPage._PIAROOT:
             try:
-                piaroot = os.environ[PiaPage.PIAROOT_ENVNAME]
+                PiaPage._PIAROOT = os.environ[PiaPage.PIAROOT_ENVNAME]
             except KeyError:
                 ## Failing that, we will use the current working directory
-                piaroot = ''
+                PiaPage._PIAROOT = ''
 
-        return piaroot
-
-### get_HTMLfromPIACode will be easier to test if it is a staticmethod. The only
-### inputs are source and optional piaroot, and it always returns HTML or raises
-### an error.
+        return PiaPage._PIAROOT
 
     @staticmethod
-    def get_HTMLfromPIACode(source, piaroot, overwrite=False):
+    def set_piaroot(root):
+        """Set the root directory for PIA text files. Generally, this should
+        be called before a constructor. It is unnecessary if the environment
+        variable PIAPATH is defined.
+
+        The path to the local copy of a particular PIA text file is
+            piaroot/PIAnnxxx/PIAnnnnn.txt
+        where 'nnnnn' is replaced by the pia number. The directory name uses
+        the first two digits of the pia number followed by literal 'xxx'. This
+        prevents directories from growing to more than 1000 files.
+        """
+
+        PiaPage._PIAROOT = root
+
+    ############################################################################
+    # Main routine to retrieve HTML from either a local or remote site, and to
+    # cache a local copy if requested.
+    ############################################################################
+
+    @staticmethod
+    def get_html_for_id(source, overwrite=False):
         """Obtain the html from a PIA number or string"""
 
-### Here I swapped your code around so it is easier to see the logic.
-
         # Convert the PIA code from a string if necessary
-        if type(source) == int:
-            source = PiaPage.get_piacode(source)
+        if isinstance(source, int):
+            source = PiaPage.get_id(source)
 
         # If this is not a URL, read a local file if possible
-        if not PiaPage.isUrl(source) and not overwrite:
+        if not PiaPage.is_url(source) and not overwrite:
+            if os.path.exists(source):
+                filepath = source
+            else:
+                filepath = PiaPage.filepath_from_source(source)
+
             try:
-                filepath = PiaPage.filepath_from_source(source, piaroot)
-                if os.path.exists(filepath):
-                    with open(filepath, 'r') as file:
-                        html = file.read()
-                    return str(html)
+                with open(filepath, 'r') as file:
+                    html = file.read()
+                return str(html)
 
             # If local file not found
             except IOError:
                 pass
 
         # Otherwise, get the online version
-        if PiaPage.isUrl(source):
+        if PiaPage.is_url(source):
             url = source
         else:
             url = PiaPage.url_from_source(source)
@@ -127,50 +245,31 @@ class PiaPage(object):  ### always derive classes from object
 
         # Make sure we got back a good request
         if req.status_code != 200 or PiaPage.MISSING_PAGE_TEXT in req.text:
-            raise IOError('URL not found: "%"' % url)
+            raise IOError('URL not found: "%s"' % url)
+
+        # Replace non-ASCII characters that normally breaks HTML
+        cleaned = ''.join(c if ord(c) < 128 else ' ' for c in req.text)
 
         # Save the file so we don't need to retrieve it next time
-        filepath = PiaPage.filepath_from_source(source, piaroot)
+        filepath = PiaPage.filepath_from_source(source)
         if overwrite or not os.path.exists(filepath):
             with open(filepath, 'w') as file:
-                file.write(req.text)
+                file.write(cleaned)
 
-        return req.text
+        return cleaned
 
-### Now here we add the smaller functions used by get_HTMLfromPIACode
+    ############################################################################
+    # Utilities
+    ############################################################################
 
     @staticmethod
-    def isUrl(source):
+    def is_url(source):
         """Check if the source is a URL"""
-
-### Using "in" is fine in this line, but str.startswith() is better:
-###        if "https://photojournal.jpl.nasa.gov/" in source and len(source) <= 50:
-###            return True
-### Note also that there is no "else: return False"
-### This is simple and short and doesn't make any unnecessary assumptions:
 
         return source.startswith('http://') or source.startswith('https://')
 
-### You can see that we no longer need this function
-#     @staticmethod
-#     def isFile(source):
-#         """Check if the source is a file or not"""
-#         if not os.path.exists("htmls/" + source[5:]):
-#             return True
-#         else:
-#             return False
-
-
-### This function is so short that I copied it into get_HTMLfromPIACode. Also
-### not that I added the check to make sure it found a PIA page.
-#     @staticmethod
-#     def get_HTMLfromURL(source):
-#         """Gets the response from the request to the source"""
-#         req = requests.get(source)
-#         return req.text
-
     @staticmethod
-    def get_piacode(source):
+    def get_id(source):
         """Return a string 'PIA' + five digits from a source, which could be an
         integer, a PIA string, a filepath or a full URL."""
 
@@ -178,77 +277,149 @@ class PiaPage(object):  ### always derive classes from object
             source = 'PIA%05d' % source
 
         source = source.upper()
-        k = source.upper().rindex('PIA')   # find the rightmost 'PIA'
-        piacode = source[k:k+8]
+        k = source.upper().rindex('PIA')    # find the rightmost 'PIA'
+        id = source[k:k+8]
 
-        return piacode
-
-### I modified this function because it does a lot more now.
-### Note the use of an environment variable to indicate where to find the PIA
-### directory tree if it is not provided in the function input.
+        return str(id)
 
     @staticmethod
-    def filepath_from_source(source, piaroot=None):
+    def filepath_from_source(source):
         """Return the local file path based on the source."""
 
-        piacode = PiaPage.get_piacode(source)
-        filepath = '%sxxx/%s.txt' % (piacode[:5], piacode)
+        id = PiaPage.get_id(source)
+        filepath = '%sxxx/%s.txt' % (id[:5], id)
 
-        piaroot = PiaPage.get_piaroot(piaroot)
-        return os.path.join(piaroot, filepath)
+        return os.path.join(PiaPage.piaroot(), filepath)
 
     @staticmethod
     def url_from_source(source):
         """Return the URL based on the source."""
 
-        piacode = PiaPage.get_piacode(source)
-        return PiaPage.PIA_URL + piacode
+        id = PiaPage.get_id(source)
+        return PiaPage.PIA_URL + id
 
     ############################################################################
     # Methods to extract info from the soup
     ############################################################################
 
-    def get_Title(self):
-        """Return the title of the page example: Artemis Corona"""
-        return self.SOUP.find_all('b')[0].text
+    def get_title(self):
+        """Return the title of the page. Example: Artemis Corona"""
 
-    def get_Credit(self):
+        title = GalleryPage.soup_as_text(self.soup.find('b'))
+        if title[:8] == self.id and title[8] == ':':
+            title = title[9:].strip()
+
+        return title
+
+    def get_credit(self):
         """Return the Image Credit. Example: NASA/JPL"""
-        return self.SOUP.find_all('dd')[1].text
 
-    def get_Caption(self):
-        """Returns the caption of the page"""
-        return self.SOUP.find_all('p')[2].text
+        return GalleryPage.soup_as_text(self.soup.find_all('dd')[1])
 
-    def get_Information(self):
-        """Gets all the information inside the table. Takes the left side of the table first and loops through that side
-        then takes the right side and maps both sides into a {left  : right} kind of structure."""
+    def get_release_date(self):
+        """Return the release date in yyyy-mm-dd format."""
 
-        # the table found from the soup
+        date = GalleryPage.soup_as_text(self.soup.find_all('dd')[2])
+        date = str(date.strip())
+        date = date.replace('\\r','').replace('\\n','') # Fix HTML glitch
+        if not YMD_REGEX.match(date):
+            raise ValueError('No valid release date: ' + date)
 
-        table_found = self.SOUP.find_all('table')[0]
+        return date
 
-        # all of the sides, tr_dict is what is being returned.
+    def get_caption_and_background(self):
+        """Return the caption and any identified background information as two
+        soups."""
 
-        leftside = []
-        rightside = []
-        tr_dict = {}
+        # Get the caption as soup
+        paragraphs_in_soup = list(self.soup.find('dd').children)
 
-        # for some reason, the page says left as right and right as left so it becomes confusing
+        # Convert to strings and strip out empty strings 
+        paragraphs = [GalleryPage.soup_as_text(s) for s in paragraphs_in_soup]
 
-        # loop through the left side and add that to the leftside list. the left side can be found using the align attr
-        # the other way around for the right side but similar concept.
-        for left in table_found.find('tr').find_all('td', align="right"):
-            leftside.append(' '.join(left.text.replace(":", "").split()))
-#             print(' '.join(left.text.replace(":", "").split()))
-        for right in table_found.find('tr').find_all('td', align="left"):
-            rightside.append(' '.join(right.text.split()))
+        filtered_paragraphs_in_soup = []
+        filtered_paragraphs = []
+        for k in range(len(paragraphs)):
+            if not paragraphs[k]: continue
 
-        # i is used to find the element by index when adding the left side to the right side.
-        i = 0
-        for left_text in leftside:
-            tr_dict.update(json.loads("{\"" + left_text + "\" : \"" + rightside[i] + "\"}"))
-        return tr_dict
+            filtered_paragraphs_in_soup.append(paragraphs_in_soup[k])
+            filtered_paragraphs.append(paragraphs[k])
+
+        background_indices = []
+
+        # Test the last four paragraphs for background info
+        for k in range(-3,0):
+
+            # The first paragraph is never background info
+            if len(filtered_paragraphs) <= -k: continue
+
+            # Stop each paragraph search if any background substring is found
+            for test_str in BACKGROUND_STRINGS:
+                if test_str in filtered_paragraphs[k]:
+                    background_indices.append(k)
+                    break
+
+        self.background_indices = background_indices    # save for debugging
+
+        # Split up the paragraphs as caption and background; create new
+        # BeautifulSoup objects
+        caption_as_soup    = BeautifulSoup('', PARSER)
+        background_as_soup = BeautifulSoup('', PARSER)
+        for k in range(-len(filtered_paragraphs), 0):
+
+            if k in background_indices:
+                background_as_soup.append(filtered_paragraphs_in_soup[k])
+            else:
+                caption_as_soup.append(filtered_paragraphs_in_soup[k])
+
+        return (caption_as_soup, background_as_soup)
+
+    def load_pia_table(self):
+        """Gets all the information inside the table."""
+
+        table = {}
+
+        # The table row are best recognized by the unique bgcolor
+        rows = self.soup.find_all('tr', attrs={'bgcolor':"#eeeeee"})
+        for row in rows:
+            columns = row.find_all('td')
+
+            pair = []
+            for column in columns:
+
+              # Clean up Unicode
+              text = str(''.join([c if ord(c) < 128 else ' '
+                         for c in column.text]))
+              text = text.strip()
+
+              text = text.replace('\r', '\n')
+              items = text.split('\n')
+
+              for k in range(len(items)):
+                item = items[k]
+                item = item.strip()
+                item = item.replace('\\r','').replace('\\n','') # Fix HTML
+                item = item.strip()
+                items[k] = item
+
+              items = [i for i in items if i]
+              pair.append(items)
+
+            key = pair[0][0].replace(':','')
+            table[key] = pair[1]
+
+        return table
+
+    def find_xrefs(self):
+        """This will find any cross references to different PIA"""
+
+        xrefs = PIA_REGEX.findall(self.html)
+
+        # Return unique values in numeric order
+        xrefs = list(set(xrefs))
+        xrefs.remove(self.id)
+        xrefs.sort()
+        return xrefs
 
 ################################################################################
 # Unit tests
@@ -256,81 +427,81 @@ class PiaPage(object):  ### always derive classes from object
 
 import unittest
 
-class Test_PiaPage(unittest.TestCase):
-
-    def runTest(self):
-
-        # Tests of get_piacode
-        self.assertEqual(PiaPage.get_piacode(1), 'PIA00001')
-        self.assertEqual(PiaPage.get_piacode(12345), 'PIA12345')
-        self.assertEqual(PiaPage.get_piacode('PIA12345'), 'PIA12345')
-        self.assertEqual(PiaPage.get_piacode('PIA12xxx/PIA12345.txt'),
-                                             'PIA12345')
-        self.assertEqual(PiaPage.get_piacode(PiaPage.PIA_URL +
-                                             'PIA12345'), 'PIA12345')
-
-        # Tests of filepath_from_source (regardless of piaroot)
-        self.assertTrue(PiaPage.filepath_from_source(1).endswith(
-                                'PIA00xxx/PIA00001.txt'))
-        self.assertTrue(PiaPage.filepath_from_source(12345).endswith(
-                                'PIA12xxx/PIA12345.txt'))
-        self.assertTrue(PiaPage.filepath_from_source('PIA12345').endswith(
-                                'PIA12xxx/PIA12345.txt'))
-        self.assertTrue(PiaPage.filepath_from_source('PIA12xxx/PIA12345.whatever').endswith(
-                                'PIA12xxx/PIA12345.txt'))
-        self.assertTrue(PiaPage.filepath_from_source(PiaPage.PIA_URL +
-                                'PIA12345').endswith(
-                                'PIA12xxx/PIA12345.txt'))
-
-        # Tests of filepath_from_source (with specified piaroot)
-        self.assertEqual(PiaPage.filepath_from_source(1, '/root'),
-                                '/root/PIA00xxx/PIA00001.txt')
-        self.assertEqual(PiaPage.filepath_from_source(12345, '/root'),
-                                '/root/PIA12xxx/PIA12345.txt')
-        self.assertEqual(PiaPage.filepath_from_source('PIA12345', '/root'),
-                                '/root/PIA12xxx/PIA12345.txt')
-        self.assertEqual(PiaPage.filepath_from_source(
-                                'PIA12xxx/PIA12345.whatever', '/root'),
-                                '/root/PIA12xxx/PIA12345.txt')
-        self.assertEqual(PiaPage.filepath_from_source(PiaPage.PIA_URL +
-                                             'PIA12345', '/root'),
-                                '/root/PIA12xxx/PIA12345.txt')
-
-        self.assertEqual(PiaPage.filepath_from_source(1, ''),
-                                'PIA00xxx/PIA00001.txt')
-        self.assertEqual(PiaPage.filepath_from_source(12345, ''),
-                                'PIA12xxx/PIA12345.txt')
-        self.assertEqual(PiaPage.filepath_from_source('PIA12345', ''),
-                                'PIA12xxx/PIA12345.txt')
-        self.assertEqual(PiaPage.filepath_from_source(
-                                'PIA12xxx/PIA12345.whatever', ''),
-                                'PIA12xxx/PIA12345.txt')
-        self.assertEqual(PiaPage.filepath_from_source(PiaPage.PIA_URL +
-                                             'PIA12345', ''),
-                                'PIA12xxx/PIA12345.txt')
-
-        # Tests of url_from_source
-        self.assertEqual(PiaPage.url_from_source(1),
-                                        PiaPage.PIA_URL + 'PIA00001')
-        self.assertEqual(PiaPage.url_from_source(12345),
-                                        PiaPage.PIA_URL + 'PIA12345')
-        self.assertEqual(PiaPage.url_from_source('PIA12345'),
-                                        PiaPage.PIA_URL + 'PIA12345')
-        self.assertEqual(PiaPage.url_from_source('PIA12345'),
-                                        PiaPage.PIA_URL + 'PIA12345')
-        self.assertEqual(PiaPage.url_from_source(PiaPage.PIA_URL + 'PIA12345'),
-                                        PiaPage.PIA_URL + 'PIA12345')
-
-        self.assertRaises(ValueError, PiaPage.url_from_source,
-                                      'https://pds-rings.seti.org')
-
-        # Some of these will only work if PIAPATH is defined in the environment
-        self.assertIn('PIAPATH', os.environ)
-
-        html_from_file = PiaPage(1).HTML
-        html_from_url = PiaPage(PiaPage.url_from_source(1), overwrite=True).HTML
-
-        self.assertEqual(html_from_file, html_from_url)
+# class Test_PiaPage(unittest.TestCase):
+# 
+#     def runTest(self):
+# 
+#         # Tests of get_id
+#         self.assertEqual(PiaPage.get_id(1), 'PIA00001')
+#         self.assertEqual(PiaPage.get_id(12345), 'PIA12345')
+#         self.assertEqual(PiaPage.get_id('PIA12345'), 'PIA12345')
+#         self.assertEqual(PiaPage.get_id('PIA12xxx/PIA12345.txt'),
+#                                              'PIA12345')
+#         self.assertEqual(PiaPage.get_id(PiaPage.PIA_URL +
+#                                              'PIA12345'), 'PIA12345')
+# 
+#         # Tests of filepath_from_source (regardless of piaroot)
+#         self.assertTrue(PiaPage.filepath_from_source(1).endswith(
+#                                 'PIA00xxx/PIA00001.txt'))
+#         self.assertTrue(PiaPage.filepath_from_source(12345).endswith(
+#                                 'PIA12xxx/PIA12345.txt'))
+#         self.assertTrue(PiaPage.filepath_from_source('PIA12345').endswith(
+#                                 'PIA12xxx/PIA12345.txt'))
+#         self.assertTrue(PiaPage.filepath_from_source('PIA12xxx/PIA12345.whatever').endswith(
+#                                 'PIA12xxx/PIA12345.txt'))
+#         self.assertTrue(PiaPage.filepath_from_source(PiaPage.PIA_URL +
+#                                 'PIA12345').endswith(
+#                                 'PIA12xxx/PIA12345.txt'))
+# 
+#         # Tests of filepath_from_source (with specified piaroot)
+#         self.assertEqual(PiaPage.filepath_from_source(1, '/root'),
+#                                 '/root/PIA00xxx/PIA00001.txt')
+#         self.assertEqual(PiaPage.filepath_from_source(12345, '/root'),
+#                                 '/root/PIA12xxx/PIA12345.txt')
+#         self.assertEqual(PiaPage.filepath_from_source('PIA12345', '/root'),
+#                                 '/root/PIA12xxx/PIA12345.txt')
+#         self.assertEqual(PiaPage.filepath_from_source(
+#                                 'PIA12xxx/PIA12345.whatever', '/root'),
+#                                 '/root/PIA12xxx/PIA12345.txt')
+#         self.assertEqual(PiaPage.filepath_from_source(PiaPage.PIA_URL +
+#                                              'PIA12345', '/root'),
+#                                 '/root/PIA12xxx/PIA12345.txt')
+# 
+#         self.assertEqual(PiaPage.filepath_from_source(1, ''),
+#                                 'PIA00xxx/PIA00001.txt')
+#         self.assertEqual(PiaPage.filepath_from_source(12345, ''),
+#                                 'PIA12xxx/PIA12345.txt')
+#         self.assertEqual(PiaPage.filepath_from_source('PIA12345', ''),
+#                                 'PIA12xxx/PIA12345.txt')
+#         self.assertEqual(PiaPage.filepath_from_source(
+#                                 'PIA12xxx/PIA12345.whatever', ''),
+#                                 'PIA12xxx/PIA12345.txt')
+#         self.assertEqual(PiaPage.filepath_from_source(PiaPage.PIA_URL +
+#                                              'PIA12345', ''),
+#                                 'PIA12xxx/PIA12345.txt')
+# 
+#         # Tests of url_from_source
+#         self.assertEqual(PiaPage.url_from_source(1),
+#                                         PiaPage.PIA_URL + 'PIA00001')
+#         self.assertEqual(PiaPage.url_from_source(12345),
+#                                         PiaPage.PIA_URL + 'PIA12345')
+#         self.assertEqual(PiaPage.url_from_source('PIA12345'),
+#                                         PiaPage.PIA_URL + 'PIA12345')
+#         self.assertEqual(PiaPage.url_from_source('PIA12345'),
+#                                         PiaPage.PIA_URL + 'PIA12345')
+#         self.assertEqual(PiaPage.url_from_source(PiaPage.PIA_URL + 'PIA12345'),
+#                                         PiaPage.PIA_URL + 'PIA12345')
+# 
+#         self.assertRaises(ValueError, PiaPage.url_from_source,
+#                                         'https://pds-rings.seti.org')
+# 
+#         # Some of these will only work if PIAPATH is defined in the environment
+#         self.assertIn('PIAPATH', os.environ)
+# 
+#         html_from_file = PiaPage(1).html
+#         html_from_url = PiaPage(PiaPage.url_from_source(1), overwrite=True).html
+# 
+#         self.assertEqual(html_from_file, html_from_url)
 
 ################################################################################
 
