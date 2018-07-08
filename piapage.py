@@ -18,19 +18,46 @@ import lxml
 import re
 
 from piapage_background_strings import BACKGROUND_STRINGS
-from mission_full_names    import MISSION_FULL_NAMES
-from host_full_names       import HOST_FULL_NAMES
-from instrument_full_names import INSTRUMENT_FULL_NAMES
-from target_full_names     import TARGET_FULL_NAMES
+from piapage_gifs import PIAPAGE_MEDIUM_GIFS, PIAPAGE_SMALL_GIFS, \
+                         PIAPAGE_THUMBNAIL_GIFS
+from piapage_color_string import PIAPAGE_COLOR_STRING
 
 PARSER = 'lxml'
 
 PIA_REGEX = re.compile(r'PIA[0-9]{5}')
 YMD_REGEX = re.compile(r'[12][0-9]{3}-[01][0-9]-[0-3][0-9]$')
 
+REQUIRED_MISSIONS = set([
+    'Cassini-Huygens',
+    'Dawn',
+    'Deep Impact',
+    'Galileo',
+    'Kepler',
+    'Juno',
+    'Magellan',
+    'Mariner',
+    'MESSENGER',
+    'NEAR Shoemaker',
+    'New Horizons',
+    'Phoenix',
+    'Viking',
+    'Voyager',
+])
+
+EXCLUDED_MISSIONS = set([
+    'Aqua',
+    'Aura',
+    'FINESSE',
+    'Galaxy Evolution Explorer (GALEX)',
+    'GALEX Orbiter',
+    'NuSTAR',
+    'UAVSAR'
+])
+
 class PiaPage(GalleryPage):
 
     # Class constants
+    ROOT_URL = "https://photojournal.jpl.nasa.gov"
     PIA_URL = "https://photojournal.jpl.nasa.gov/catalog/"
     MISSING_PAGE_TEXT = 'No images in our database met your search criteria'
     PIAROOT_ENVNAME = 'PIAPATH'
@@ -59,6 +86,7 @@ class PiaPage(GalleryPage):
         self.id = PiaPage.get_id(self.source)
                             # Unique identifier for this product, e.g., PIA12345
         self.origin_url = PiaPage.url_from_source(self.source)
+#         self.local_url  = PiaPage.local_url(self.id)
 
         # Read the page as HTML
         self.html = PiaPage.get_html_for_id(self.source, overwrite)
@@ -69,23 +97,24 @@ class PiaPage(GalleryPage):
 
         # Validate the PIA page
         if len(self.soup.find_all('dt')) != 3:
-            raise IOError("PIA page does not contain three description tags")
+            raise ValueError(self.id + " page does not contain three " +
+                                       "description tags")
 
         text = self.soup.find_all('dt')[0].text.strip()
         if 'Caption' not in text:
-            raise IOError("No caption found in PIA page")
+            raise ValueError(self.id + " page contains no caption")
 
         text = self.soup.find_all('dt')[1].text.strip()
         if not text.startswith("Image Credit:"):
-            raise IOError("No image credit found in PIA page")
+            raise ValueError(self.id + " page contains no image credit")
 
         text = self.soup.find_all('dt')[2].text.strip()
         if not text.startswith("Image Addition Date:"):
-            raise IOError("No image addition date found in PIA page")
+            raise ValueError(self.id + " page contains no image date")
 
         text = self.soup.find_all('b')[0].text.lstrip()
         if text[:8] != self.id:
-            raise IOError("Invalid title in PIA page: " + text)
+            raise ValueError(self.id + " page has invalid title: " + text)
 
         # Extract the caption and separate it from the background info
         (self.caption_soup,
@@ -96,8 +125,12 @@ class PiaPage(GalleryPage):
         self.release_date = self.get_release_date()
         self.xrefs = self.find_xrefs()
 
+        self.is_movie = self.get_is_movie()
+        self.is_color = self.get_is_color()
+        self.is_grayscale = self.get_is_grayscale()
+
         # Get key information from the PIA page's table
-        self.pia_table = self.load_pia_table()
+        self.get_pia_tables()
         missions    = self.pia_table.get('Mission', [])
         hosts       = self.pia_table.get('Spacecraft', [])
         instruments = self.pia_table.get('Instrument', [])
@@ -106,65 +139,233 @@ class PiaPage(GalleryPage):
         if targets and 'Sol' in targets[0]:
             targets[0] = 'Sun'
 
-        # Commone error in pages
+        # Known errors in pages
         if 'Comet' in targets and 'Rosetta' in missions:
             targets[targets.index('Comet')] = '67P/Churyumov-Gerasimenko'
 
-        # Take the first entry as primary
-        if missions:
-            missions = [MISSION_FULL_NAMES.get(m, m) for m in missions]
-            missions = [str(m) for m in missions]
-            self._mission = missions[0]
+        if 'Dawn' in missions and 'Field Experiment' in hosts:
+            hosts = ['Dawn']
 
-        if hosts:
-            hosts = [HOST_FULL_NAMES.get(h.lower(), h) for h in hosts]
-            hosts = [str(h) for h in hosts]
-            self._host = hosts[0]
+        if 'Mars Pathfinder (MPF)' in missions and 'Field Experiment' in hosts:
+            hosts.remove('Field Experiment')
+
+        if 'Hubble Space Telescope' in instruments:
+            instruments.remove('Hubble Space Telescope')
+            hosts += ['Hubble Space Telescope (HST)']
+
+        if 'MESSENGER' in missions and \
+           'Gamma-ray Spectrometer (GRS)' in instruments:
+                k = instruments.index('Gamma-ray Spectrometer (GRS)')
+                instruments[k] = 'Gamma-Ray and Neutron Spectrometer (GRNS)'
+
+        if self.id == 'PIA15485':
+            hosts.append('-Deep Impact')
+            missions.append('-Deep Impact')
+
+        if 'Mars Volcanic Emission Life Scout (MARVEL)' in instruments:
+            instruments.remove('Mars Volcanic Emission Life Scout (MARVEL)')
+
+        if 'VIRTIS' in instruments and 'Venus Express' in hosts:
+            hosts.remove('Venus Express')
+            self._primary_hosts = ['Venus Express']
+            hosts = ['Venus Express'] + hosts
+
+        if 'Cassini-Huygens' in missions and \
+           'Infrared Spectrometer' in instruments:
+                k = instruments.index('Infrared Spectrometer')
+                instruments[k] = 'Composite Infrared Spectrometer (CIRS)'
+
+        if 'Cassini-Huygens' in missions and \
+           'Infrared Spectrometer (IRS)' in instruments:
+                k = instruments.index('Infrared Spectrometer (IRS)')
+                instruments[k] = 'Composite Infrared Spectrometer (CIRS)'
+
+        if 'Visible Light' in instruments:
+            instruments.remove('Visible Light')
+
+        if 'Ultraviolet Light' in instruments:
+            instruments.remove('Ultraviolet Light')
+
+        # Order might matter here because certain properties depend on others
 
         if instruments:
-            instruments = [INSTRUMENT_FULL_NAMES.get(i.lower(), i)
+            instruments = [GalleryPage.full_instrument_name(i)
                            for i in instruments]
             instruments = [str(i) for i in instruments]
-            self._instrument = instruments[0]
+            self._primary_instruments = instruments     # assume instruments are
+                                                        # in primary order
 
-        if targets:
-            targets = [TARGET_FULL_NAMES.get(t.lower(), t) for t in targets]
-            targets = [str(t) for t in targets]
-            self._target = targets[0]
-
-        planets = self.pia_table.get('Is a satellite of', [])
-        if planets and 'Sol' in planets[0]:
-            planets = self.pia_table.get('Target Name', [])
-            planets = [str(p) for p in planets]
-            planets = [p for p in planets if p in GalleryPage.PLANET_NAMES]
-
-            if planets:
-                self._planet = planets[0]
-
-        # Make sure the list attributes are complete
-        if missions:
-            self._missions = list(set(self.missions + missions))
-            self._missions.sort()
+            # If any of these refer to known detectors, add them to the detector
+            # list
+            self._primary_detectors = []
+            for inst in instruments:
+                detector = GalleryPage.full_detector_name(inst)
+                if detector:
+                    self._primary_detectors.append(detector)
 
         if hosts:
-            self._hosts = list(set(self.hosts + hosts))
-            self._hosts.sort()
+            hosts = [GalleryPage.full_host_name(h) for h in hosts]
+            hosts = [str(h) for h in hosts]
+            if not self.instruments or not self.instruments[0]:
+                self._primary_hosts = hosts
+            self._hosts = hosts
 
-            # Use the mission as the host if necessary
-            if missions and self._missions and not self._hosts:
-                self._hosts = self._missions
-
-        if instruments:
-            self._instruments = list(set(self.instruments + instruments))
-            self._instruments.sort()
+        if missions:
+            missions = [GalleryPage.full_mission_name(m) for m in missions]
+            missions = [str(m) for m in missions]
+            if not self.hosts or not self.hosts[0]:
+                self._primary_missions = missions
+            self._missions = missions
 
         if targets:
-            self._targets = list(set(self.targets + targets))
-            self._targets.sort()
+            targets = [GalleryPage.full_target_name(t) for t in targets]
+            targets = [str(t) for t in targets]
+            self._primary_targets = targets         # assume targets are
+                                                    # in primary order
 
-        if planets:
-            self._planets = list(set(self.planets + planets))
-            self._planets.sort()
+        systems = self.pia_table.get('Is a satellite of', [])
+        if systems and 'Sol' in systems[0]:
+            systems = self.pia_table.get('Target Name', [])
+            systems = [str(s) for s in systems]
+            systems = [s for s in systems if s in
+                        ['Earth', 'Mars', 'Jupiter', 'Saturn', 'Uranus',
+                         'Neptune', 'Pluto']]
+
+            if not systems:
+                systems = ['']
+
+            if len(systems) == 1 and not targets:
+                self._primary_systems = [systems[0]]
+            self._systems = systems
+
+        # Determine if this is a planetary press release
+        target_types_filtered = set(self.target_types)
+        target_types_filtered.discard('')
+        target_types_filtered.discard('Sun')
+        target_types_filtered.discard('Earth')
+
+        self.is_planetary = len(target_types_filtered) != 0
+
+        for mission in self.missions:
+            if mission in REQUIRED_MISSIONS or 'Mars' in mission:
+                self.is_planetary = True
+                break
+
+        for mission in self.missions:
+            if mission in EXCLUDED_MISSIONS:
+                self.is_planetary = False
+                break
+
+        # Locate remote resources and relevant info
+        self.remote_version_info = {}
+
+        if 'Product Size' in self.pia_table:
+            text = self.pia_table['Product Size'][0]
+            w_x_h = text.partition(' pixels')[0]
+            parts = w_x_h.split(' x ')
+            width  = int(parts[0])
+            height = int(parts[1])
+            shape = (width, height)
+        else:
+            shape = ()
+
+        # Find the images and sizes in bytes
+        for (key,value) in self.pia_soup_table.items():
+            try:
+                href = value.a.attrs['href']
+            except (KeyError, AttributeError):
+                continue
+
+            if 'PIA' not in href: continue
+
+            info = self.pia_table[key][0].partition('(')[2].strip()
+            size = 0
+            if info:
+                try:
+                    size_str = info.partition(')')[0]
+                    parts = size_str.split(' ')
+                    size = float(parts[0])
+                    units = parts[1].strip()
+                    if units == 'MB':
+                        size *= 1.e6
+                    elif units == 'kB':
+                        size *= 1000.
+                except Exception:
+                    pass            # If anything goes wrong, size = 0
+
+            size = int(size + 0.5)  # round to int
+            self.remote_version_info[key] = (PiaPage.ROOT_URL + href,
+                                             shape, size)
+
+        for img in self.soup.find_all('img'):
+            if 'browse' in img.attrs['src']:
+                self.remote_version_info['Browse Image'] = (
+                                PiaPage.ROOT_URL + str(img.attrs['src']), (), 0)
+                break
+
+        for a in self.soup.find_all('a'):
+            if 'jpegMod' in a.attrs['href']:
+                self.remote_version_info['Medium Image'] = (
+                                PiaPage.ROOT_URL + str(a.attrs['href']), (), 0)
+                break
+
+        # If it's a movie
+        if self.is_movie:
+            self.remote_version_info['Movie Download Options'] = \
+                            (PiaPage.ROOT_URL + '/animation/' + self.id, (), 0)
+
+        self.local_html_url      = PiaPage.local_html_url_for_id(self.id)
+        self.local_thumbnail_url = PiaPage.local_thumbnail_url_for_id(self.id)
+        self.local_small_url     = PiaPage.local_small_url_for_id(self.id)
+        self.local_medium_url    = PiaPage.local_medium_url_for_id(self.id,
+                                                                  self.is_movie)
+
+    ############################################################################
+    # Procedures to locate URLs
+    ############################################################################
+
+    @staticmethod
+    def local_html_url_for_id(id):
+
+        return GalleryPage.LOCAL_ROOT_ + 'pages/%sxxx/%s.html' % (id[:5], id)
+
+    @staticmethod
+    def local_thumbnail_url_for_id(id):
+
+        ipia = int(id[3:])
+        if ipia in PIAPAGE_THUMBNAIL_GIFS:
+            suffix = 'gif'
+        else:
+            suffix = 'jpg'
+
+        return GalleryPage.LOCAL_ROOT_ + \
+                        'thumbnails/%sxxx/%s_thumb.%s' % (id[:5], id, suffix)
+
+    @staticmethod
+    def local_small_url_for_id(id):
+
+        ipia = int(id[3:])
+        if ipia in PIAPAGE_SMALL_GIFS:
+            suffix = 'gif'
+        else:
+            suffix = 'jpg'
+
+        return GalleryPage.LOCAL_ROOT_ + \
+                        'small/%sxxx/%s_small.%s' % (id[:5], id, suffix)
+
+    @staticmethod
+    def local_medium_url_for_id(id, is_movie):
+
+        ipia = int(id[3:])
+        if ipia in PIAPAGE_MEDIUM_GIFS:
+            suffix = 'gif'
+        elif is_movie:
+            return PiaPage.ROOT_URL + '/animation/' + id
+        else:
+            suffix = 'jpg'
+
+        return GalleryPage.LOCAL_ROOT_ + \
+                        'medium/%sxxx/%s_med.%s' % (id[:5], id, suffix)
 
     ############################################################################
     # piaroot() returns the path to the root directory for PIA text files. It
@@ -327,6 +528,34 @@ class PiaPage(GalleryPage):
 
         return date
 
+    def get_is_movie(self):
+        """Return True if this is a movie; False if it is a still."""
+
+        test = self.soup.find('td', attrs={'bgcolor': '#cccccc'})
+        if not test: return False
+
+        return 'movie' in test.text
+
+    def get_is_color(self):
+        """Return True if this is in color; False if it is a grayscale or
+        unknown."""
+
+        ipia = int(self.id[3:])
+        try:
+            return PIAPAGE_COLOR_STRING[ipia] == '3'
+        except:
+            return False
+
+    def get_is_grayscale(self):
+        """Return True if this is black and white; False if it is a in color or
+        unknown."""
+
+        ipia = int(self.id[3:])
+        try:
+            return PIAPAGE_COLOR_STRING[ipia] == '1'
+        except:
+            return False
+
     def get_caption_and_background(self):
         """Return the caption and any identified background information as two
         soups."""
@@ -374,15 +603,17 @@ class PiaPage(GalleryPage):
 
         return (caption_as_soup, background_as_soup)
 
-    def load_pia_table(self):
+    def get_pia_tables(self):
         """Gets all the information inside the table."""
 
         table = {}
+        soup_table = {}
 
         # The table row are best recognized by the unique bgcolor
         rows = self.soup.find_all('tr', attrs={'bgcolor':"#eeeeee"})
         for row in rows:
             columns = row.find_all('td')
+            soup_value = columns[1]
 
             pair = []
             for column in columns:
@@ -395,23 +626,29 @@ class PiaPage(GalleryPage):
               text = text.replace('\r', '\n')
               items = text.split('\n')
 
+              new_items = []
               for k in range(len(items)):
                 item = items[k]
                 item = item.strip()
                 item = item.replace('\\r','').replace('\\n','') # Fix HTML
                 item = item.strip()
-                items[k] = item
+                if not item: continue
 
-              items = [i for i in items if i]
-              pair.append(items)
+                parts = item.split(',')
+                for part in parts:
+                    new_items.append(part.strip())
+
+              pair.append(new_items)
 
             key = pair[0][0].replace(':','')
             table[key] = pair[1]
+            soup_table[key] = soup_value
 
-        return table
+        self.pia_table = table
+        self.pia_soup_table = soup_table
 
     def find_xrefs(self):
-        """This will find any cross references to different PIA"""
+        """This will find any cross references to different PIAs"""
 
         xrefs = PIA_REGEX.findall(self.html)
 
@@ -420,6 +657,18 @@ class PiaPage(GalleryPage):
         xrefs.remove(self.id)
         xrefs.sort()
         return xrefs
+
+    pattern = '"https{0,1}://photojournal.jpl.nasa.gov/catalog/(PIA..)(...)"'
+    BEFORE = re.compile(pattern)
+    AFTER  = r'"%spages/\1xxx/\1\2.html"' % GalleryPage.LOCAL_ROOT_
+
+    def write_jekyll(self, filepath):
+        """Uses super() but fills in the default arguments."""
+
+        remote_keys = ['Movie Download Options',
+                      'Full-Res JPEG', 'Full-Res TIFF']
+        self._write_jekyll(filepath, remote_keys,
+                                     [(PiaPage.BEFORE, PiaPage.AFTER)])
 
 ################################################################################
 # Unit tests

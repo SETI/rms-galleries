@@ -1,40 +1,58 @@
 MISSION_FULL_NAMES = {
-    'Spaceborne Imaging Radar-C/X-Band Synthetic Aperture Radar'
-                : 'Spaceborne Imaging Radar-C/X-Band Synthetic Aperture Radar (SIR-C)',
-    'SIR-C'     : 'Spaceborne Imaging Radar-C/X-Band Synthetic Aperture Radar (SIR-C)',
-    'Hubble Space Telescope'
-                : 'Hubble Space Telescope (HST)',
     'HST'       : 'Hubble Space Telescope (HST)',
-    'James Webb Space Telescope'
-                : 'James Webb Space Telescope (JWST)',
     'JWST'      : 'James Webb Space Telescope (JWST)',
-    'Mars Global Surveyor'
-                : 'Mars Global Surveyor (MGS)',
-    'Mars Global Surveyor Orbiter'
-                : 'Mars Global Surveyor (MGS)',
     'MGS'       : 'Mars Global Surveyor (MGS)',
-    'Mars Pathfinder'
-                : 'Mars Pathfinder (MPF)',
     'MPF'       : 'Mars Pathfinder (MPF)',
+    'SIR-C'     : 'Spaceborne Imaging Radar-C/X-Band Synthetic Aperture Radar (SIR-C)',
     'Viking 1'  : 'Viking',
     'Viking 2'  : 'Viking',
-    'Voyager 1' : 'Voyager',
-    'Voyager 2' : 'Voyager',
-    'Mars Reconnaissance Orbiter'
-                : 'Mars Reconnaissance Orbiter (MRO)',
-    'MRO'       : 'Mars Reconnaissance Orbiter (MRO)',
-    'Mars Science Laboratory'
-                : 'Mars Science Laboratory (MSL)',
-    'MSL'       : 'Mars Science Laboratory (MSL)',
-    'Mars Exploration Rover'
-                : 'Mars Exploration Rover (MER)',
-    'MER'       : 'Mars Exploration Rover (MER)',
-    'Near Earth Asteroid Rendezvous'
-                : 'NEAR Shoemaker',
-    'NEAR'      : 'NEAR Shoemaker',
-    'Mars Odyssey'
-                : '2001 Mars Odyssey',
+    'DSPSE'     : 'LCROSS',
+    'Mariner 10': 'Mariner',
+    'Mariner 2' : 'Mariner',
+
+    'Hubble Space Telescope'            : 'Hubble Space Telescope (HST)',
+    'James Webb Space Telescope'        : 'James Webb Space Telescope (JWST)',
+    'Mariner Mars 1964 (Mariner 4)'     : 'Mariner',
+    'Mariner Mars 1969 (Mariner 7)'     : 'Mariner',
+    'Mariner Mars 1971 (Mariner 9)'     : 'Mariner',
+    'Mariner Mars 1971 (Mariner 9)'     : 'Mariner',
+    'Mariner Venus Mercury (Mariner 10)': 'Mariner',
+    'Mars Exploration Rover'            : 'Mars Exploration Rover (MER)',
+    'Mars Express (MEX)'                : 'Mars Express',
+    'Mars Global Surveyor Orbiter'      : 'Mars Global Surveyor (MGS)',
+    'Mars Global Surveyor'              : 'Mars Global Surveyor (MGS)',
+    'Mars Odyssey'                      : '2001 Mars Odyssey',
+    'Mars Pathfinder'                   : 'Mars Pathfinder (MPF)',
+    'Mars Reconnaissance Orbiter'       : 'Mars Reconnaissance Orbiter (MRO)',
+    'Mars Science Laboratory'           : 'Mars Science Laboratory (MSL)',
+    'MAVEN'                             : 'Mars Atmosphere and Volatile Evolution (MAVEN)',
+    'MER'                               : 'Mars Exploration Rover (MER)',
+    'MRO'                               : 'Mars Reconnaissance Orbiter (MRO)',
+    'MSL'                               : 'Mars Science Laboratory (MSL)',
+    'Near Earth Asteroid Rendezvous'    : 'NEAR Shoemaker',
+    'NEAR'                              : 'NEAR Shoemaker',
+    'Voyager Interstellar Mission'      : 'Voyager',
+
     'Mars Atmosphere and Volatile Evolution (MAVEN)'
-                : 'Mars Atmosphere and Volatile Evolution (MAVEN)',
-    'MAVEN'     : 'Mars Atmosphere and Volatile Evolution (MAVEN)',
+                                        : 'Mars Atmosphere and Volatile Evolution (MAVEN)',
+    'Spaceborne Imaging Radar-C/X-Band Synthetic Aperture Radar'
+                                        : 'Spaceborne Imaging Radar-C/X-Band Synthetic Aperture Radar (SIR-C)',
+    'Transiting Planets and Planetesimals Small Telescope'
+                                        : 'Transiting Planets and Planetesimals Small Telescope (TRAPPIST)',
+    'TRAPPIST'                          : 'Transiting Planets and Planetesimals Small Telescope (TRAPPIST)',
+    'StardustNExT'                      : 'Stardust',
+    'Spirit (MER-A)'                    : 'Mars Exploration Rover (MER)',
+    'Opportunity (MER-B)'               : 'Mars Exploration Rover (MER)',
+    'Deep Space 1 (DS1)'                : 'Deep Space 1',
+    'Deep Impact  (DIXI)'               : 'Deep Impact',
+    'Deep Impact (DIXI)'                : 'Deep Impact',
+    'ACRIMSAT'                          : 'Active Cavity Irradiance Monitor Satellite (AcrimSat)',
+    'ARM'                               : 'Asteroid Redirect Mission (ARM)',
+    'Mars Volcanic Emission Life Scout (MARVEL)': 'Mars Scout',
+    'Spitzer Telescope'                 : 'Spitzer Space Telescope',
+    'Kepler Spacecraft'                 : 'Kepler',
+    'MarCO'                             : 'Mars Cube One (MarCO)',
+    'InSight'                           : 'Mars InSight',
+    'SDO'                               : 'Solar Dynamics Observatory (SDO)',
+    'NEOCam'                            : 'Near-Earth Object Camera (NEOCam)'
 }

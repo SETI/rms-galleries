@@ -1,5 +1,10 @@
 BACKGROUND_STRINGS = [
+    "is conducted by the Jet Propulsion Laboratory for NASA",
+    "managed by the Jet Propulsion Laboratory for the NASA",
+    "managed and controlled by the Jet Propulsion Laboratory for NASA",
+    "managed by the Jet Propulsion Laboratory for NASA"
     "The Jet Propulsion Laboratory's Mars Surveyor Operations Project operates",
+    "JPL managed the Voyager Project for NASA's Office of Space Science"
     "for details on crediting THEMIS images",
     "For more information about the mission, go to",
     "For more information about MAVEN, visit",

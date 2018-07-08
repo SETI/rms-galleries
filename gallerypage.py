@@ -10,12 +10,24 @@
 import re
 import julian
 
-from planet_from_target import PLANET_FROM_TARGET
+# Dictionaries used to standardize keyword values
+from system_from_target       import SYSTEM_FROM_TARGET
+from mission_from_host        import MISSION_FROM_HOST
+from host_from_instrument     import HOST_FROM_INSTRUMENT
+from instrument_from_detector import INSTRUMENT_FROM_DETECTOR
+
+from target_full_names      import TARGET_FULL_NAMES
+from mission_full_names     import MISSION_FULL_NAMES
+from host_full_names        import HOST_FULL_NAMES
+from instrument_full_names  import INSTRUMENT_FULL_NAMES
+from detector_full_names    import DETECTOR_FULL_NAMES
 
 class GalleryPage(object):
 
-    PLANET_NAMES = ['Mercury', 'Venus', 'Earth', 'Mars', 'Jupiter',
-                    'Saturn', 'Uranus', 'Neptune', 'Pluto']
+    PLANET_NAMES = ['Mercury', 'Venus', 'Mars', 'Jupiter',
+                    'Saturn', 'Uranus', 'Neptune']
+
+    LOCAL_ROOT_ = '/galleries/'
 
     # Null constructor
     def __init__(self):
@@ -40,12 +52,6 @@ class GalleryPage(object):
                             # BeautifulSoup. Background information refers to
                             # descriptions of the mission, instrument, etc. that
                             # is not unique to this page.
-
-        self.local_viewables
-                            # The local path to the image files. These can be
-                            # stored in multiple sizes and the optimal one will
-                            # be seleced for resizing when it's time to display.
-
 
     ############################################################################
     # Properties for which overrides by subclasses are optional. Default
@@ -78,7 +84,7 @@ class GalleryPage(object):
             paragraphs = [GalleryPage.soup_as_text(s)
                           for s in paragraphs_in_soup]
             paragraphs = [p for p in paragraphs if p]
-            self._caption_text = '\r\r'.join(paragraphs)
+            self._caption_text = '\n\n'.join(paragraphs)
 
         return self._caption_text
 
@@ -91,7 +97,7 @@ class GalleryPage(object):
             paragraphs = [GalleryPage.soup_as_text(s)
                           for s in paragraphs_in_soup]
             paragraphs = [p for p in paragraphs if p]
-            self._background_text = '\r\r'.join(paragraphs)
+            self._background_text = '\n\n'.join(paragraphs)
 
         return self._background_text
 
@@ -108,12 +114,8 @@ class GalleryPage(object):
         found.sort()
         return found
 
-    def _get_keywords_by_suffix(self, suffix, attr):
-        """Utility to select keywords by suffix."""
-
-        # If the value is a subclass attribute, return it
-        if hasattr(self, attr):
-            return self.__dict__[attr]
+    def _get_keywords_by_suffix(self, suffix):
+        """Utility to select keywords by suffix from scraping the text."""
 
         # Default is to return every keyword with a identified suffix
         keywords = self._keywords_with_suffixes
@@ -122,189 +124,382 @@ class GalleryPage(object):
         filtered.sort()
         return filtered
 
-    def _get_primary_keyword_by_suffix(self, suffix, attr, keywords):
-        """The name of the primary keyword value associated with the image."""
+    def _get_keywords_by_category(self, suffix, front_attr='', front_values=[],
+                                                tail_attr=''):
+        """A list of the keyword values associated with the image. The primary
+        keyword is first in the returned list. If the primary key cannot be
+        identified, the first item in the list is blank.
 
-        # If the value is a subclass attribute, return it
-        if hasattr(self, attr):
-            return self.__dict__[attr]
+        The list is constructed as follows.
+        1. If front_attr is defined and self has this attribute, the first name
+           on this list starts (and is primary) on the returned list.
+        2. If the list is to be returned is still empty and front_values is not
+           an empty list, the first item on this list becomes the first item on
+           the returned list.
+        3. Any remaining items associated with front_attr are appended to the
+           list.
+        4. Next, a list constructed by scraping keywords with the specified
+           suffix (e.g., "+t" for targets) is appended.
+        5. Finally, if tail_attr is defined and self has this attribute, then
+           it contains a list of names appended to the end of the list. Items
+           beginning with "-" are removed from the list if present.
 
-        # If there is only one host keyword, return it
-        if len(keywords) == 1:
-            return keywords[0]
+        Use front_attr and front_values to define the primary.
 
-        # If there are multiple answers, see if there is exactly one in the
-        # title
-        if len(keywords) > 1:
-            keywords = self._keywords_with_suffixes_from_title
-            filtered = {k.partition('+')[0] for k in keywords if suffix in k}
-            filtered = list(filtered)
-            if len(filtered) == 1:
-                return filtered[0]
+        In the returned list, a defined primary keyword comes first. Any
+        remaining keywords are in alphabeticaly order. If a primary keyword
+        has not been clearly defined, the list is returned with an empty string
+        as the first element.
+        """
 
-        # Failing that, see if there is exactly one in the background text
-        if len(keywords) > 1:
-            keywords = self._keywords_with_suffixes_from_background
-            filtered = {k.partition('+')[0] for k in keywords if suffix in k}
-            filtered = list(filtered)
-            if len(filtered) == 1:
-                return filtered[0]
+        results = []
+        primary = ''
 
-        # Otherwise give up
-        return ''
+        # front_attr
+        front_attr_keywords = []
+        if front_attr and hasattr(self, front_attr):
+            front_attr_keywords = self.__dict__[front_attr]
+            results = list(front_attr_keywords)
+
+        if front_attr_keywords:
+            primary = front_attr_keywords[0]
+
+        # front_values
+        if front_values:
+            if not primary:
+                primary = front_values[0]
+                if primary and primary[0] == '?':
+                    primary = ''
+
+            results += front_values
+
+        # Scrape the category keywords from the caption and other text
+        keywords = self._keywords_with_suffixes
+        keywords = {str(k.partition('+')[0]) for k in keywords if suffix in k}
+        results += list(keywords)
+
+        # tail_attr
+        if tail_attr and hasattr(self, tail_attr):
+            for value in self.__dict__[tail_attr]:
+                if value and value[0] == '-' and value[1:] in results:
+                    results.remove(value[1:])
+                else:
+                    results.append(value)
+
+        # Try to identify the primary
+
+        # Handle leading keywords that begin with question marks. One of these
+        # is the primary only if the same item appears (without "?") later in
+        # the list. Otherwise, omit this item and try again.
+
+        if not primary:
+            while results and results[0] and results[0][0] == '?':
+                if results[0][1:] in results[1:]:
+                    primary = results[0][1:]
+                    results[0] = primary
+                    break
+                else:
+                    results = results[1:]
+
+        # At this point, remove any more result values that start with a
+        # question mark
+        results = [r for r in results if r and r[0] != '?']
+
+        # If necessary, keep trying
+        if not primary:
+            result_set = set(results)
+
+            if len(result_set) == 1:
+                primary = results[0]
+
+            # If there are multiple answers, see if there is exactly one in the
+            # title
+            elif len(result_set) > 1:
+                test = self._keywords_with_suffixes_from_title
+                test = {k.partition('+')[0] for k in test if suffix in k}
+                test = list(test)
+                if len(test) == 1:
+                    primary = test[0]
+
+                # Failing that, see if there is exactly 
+                else:
+                    test = self._keywords_with_suffixes_from_background
+                    test = {k.partition('+')[0] for k in test if suffix in k}
+                    test = list(test)
+                    if len(test) == 1:
+                        primary = test[0]
+
+        # Remove duplicates, sort
+        results = list(set(results))
+        results.sort()
+
+        # Put the primary in front (empty string if unknown)
+        if primary in results:
+            results.remove(primary)
+
+        return [primary] + results
 
     @property
     def missions(self):
-        """A list of the names of missions associated with the image."""
+        """A list of the names of missions associated with the image. The
+        primary mission comes first. If the primary mission is unknown, the list
+        begins with ''."""
 
-        return self._get_keywords_by_suffix('+m', '_missions')
+        # Return saved value if present
+        if hasattr(self, '_missions_filled'):
+            return self._missions_filled
+
+        front_values = [MISSION_FROM_HOST.get(key,(key,''))[0]
+                        for key in self.hosts]
+        front_values = [v for v in front_values if v]   # skip empty values
+
+        # Save value for future requests
+        self._missions_filled = self._get_keywords_by_category('+m',
+                                                            '_primary_missions',
+                                                            front_values,
+                                                            '_missions')
+        return self._missions_filled
 
     @property
-    def mission(self):
-        """A list of the names of missions associated with the image."""
+    def host_types(self):
+        """A list of the types of the hosts associated with the image. The
+        type of the primary host comes first. If the primary host is unknown,
+        the list begins with ''."""
 
-        return self._get_primary_keyword_by_suffix('+m', '_mission',
-                                                   self.missions)
+        # Return saved value if present
+        if hasattr(self, '_host_types_filled'):
+            return self._host_types_filled
+
+        front_values = [MISSION_FROM_HOST.get(key,('',''))[1]
+                        for key in self.hosts]
+        front_values = [v for v in front_values if v]   # skip empty values
+
+        # Save value for future requests
+        self._host_types_filled = self._get_keywords_by_category('+H',
+                                                        '_primary_host_types',
+                                                        front_values,
+                                                        '_host_types')
+        return self._host_types_filled
 
     @property
     def hosts(self):
         """A list of spacecraft or instrument hosts associated with the
-        image."""
+        image. The primary host comes first. If the primary host is unknown,
+        the list begins with '',"""
 
-        return self._get_keywords_by_suffix('+h', '_hosts')
+        # Return saved value if present
+        if hasattr(self, '_hosts_filled'):
+            return self._hosts_filled
 
-    @property
-    def host(self):
-        """The name of the primary spacecraft or instrument hosts associated
-        with the image."""
+        # This keeps the host values in the order of the instruments
+        front_values = []
+        for inst in self.instruments:
+            front_value = None
 
-        return self._get_primary_keyword_by_suffix('+h', '_host',
-                                                   self.hosts)
+            key = inst.lower()
+            if key in HOST_FROM_INSTRUMENT:
+                front_value = HOST_FROM_INSTRUMENT[key]
+            elif '(' in key:
+                abbrev = key.partition('(')[2][:-1]
+                abbrev = abbrev.partition(')')[0]
+                if abbrev in HOST_FROM_INSTRUMENT:
+                    front_value = HOST_FROM_INSTRUMENT[abbrev]
 
+            if isinstance(front_value, str):
+                if front_value in front_values: continue
+                front_values.append(front_value)
+
+            elif isinstance(front_value, (list, tuple)):
+                for value in front_value:
+                    if value in front_values: continue
+                    front_values.append('?' + value)
+                        # "?" means use this value at this location in the list
+                        # only if it can be confirmed that the host is also
+                        # elsewhere in the list.
+
+        # Save value for future requests
+        self._hosts_filled = self._get_keywords_by_category('+h',
+                                                            '_primary_hosts',
+                                                            front_values,
+                                                            '_hosts')
+        return self._hosts_filled
 
     @property
     def instruments(self):
-        """A list of the instruments associated with the image."""
+        """A list of the instruments associated with the image. The primary
+        instrument comes first. If the primary instrument is unknown, the list
+        begins with ''."""
 
-        return self._get_keywords_by_suffix('+i', '_instruments')
+        # Return saved value if present
+        if hasattr(self, '_instruments_filled'):
+            return self._instruments_filled
+
+        # This keeps the instrument values in the order of the detectors
+        front_values = []
+        for det in self.detectors:
+            front_value = None
+
+            key = det.lower()
+            if key in INSTRUMENT_FROM_DETECTOR:
+                front_value = INSTRUMENT_FROM_DETECTOR[key]
+            elif '(' in key:
+                abbrev = key.partition('(')[2][:-1]
+                abbrev = abbrev.partition(')')[0]
+                if abbrev in INSTRUMENT_FROM_DETECTOR:
+                    front_value = INSTRUMENT_FROM_DETECTOR[abbrev]
+
+            if isinstance(front_value, str):
+                if front_value in front_values: continue
+                front_values.append(front_value)
+
+            elif isinstance(front_value, (list, tuple)):
+                for value in front_value:
+                    if value in front_values: continue
+                    front_values.append('?' + value)
+                        # "?" means use this value at this location in the list
+                        # only if it can be confirmed that the host is also
+                        # elsewhere in the list.
+
+
+        # Save value for future requests
+        self._instruments_filled = self._get_keywords_by_category('+i',
+                                                        '_primary_instruments',
+                                                        front_values,
+                                                        '_instruments')
+        return self._instruments_filled
 
     @property
-    def instrument(self):
-        """The name of the primary instrument associated with the image."""
+    def detectors(self):
+        """A list of the detectors associated with the image. The primary
+        detector comes first. If the primary detector is unknown or not
+        applicable to the instrument, the list begins with ''."""
 
-        return self._get_primary_keyword_by_suffix('+i', '_instrument',
-                                                   self.instruments)
+        # Return saved value if present
+        if hasattr(self, '_detectors_filled'):
+            return self._detectors_filled
+
+        # Save value for future requests
+        self._detectors_filled = self._get_keywords_by_category('+d',
+                                                        '_primary_detectors',
+                                                        [],
+                                                        '_detectors')
+        return self._detectors_filled
 
     @property
     def targets(self):
-        """A list of the target bodies associated with the image."""
+        """A list of the target bodies associated with the image. The primary
+        target comes first. If the primary target is unknown, the list begins
+        with ''."""
 
-        return self._get_keywords_by_suffix('+t', '_targets')
+        # Return saved value if present
+        if hasattr(self, '_targets_filled'):
+            return self._targets_filled
 
-    @property
-    def target(self):
-        """The name of the primary target body associated with the image."""
-
-        return self._get_primary_keyword_by_suffix('+t', '_target',
-                                                   self.targets)
+        # Save value for future requests
+        self._targets_filled = self._get_keywords_by_category('+t',
+                                                             '_primary_targets',
+                                                             [],
+                                                             '_targets')
+        return self._targets_filled
 
     @property
     def target_types(self):
         """A list of the target types, e.g. comet, asteroid, satellite, planet,
-        etc. associated with the image."""
+        etc. associated with the image. The type of the primary target comes
+        first. If unknown, then the list begins with ''."""
 
-        return self._get_keywords_by_suffix('+T', '_target_types')
+        # Return saved value if present
+        if hasattr(self, '_target_types_filled'):
+            return self._target_types_filled
 
-    @property
-    def target_type(self):
-        """The type of the primary target body associated with the image."""
+        front_values = [SYSTEM_FROM_TARGET.get(key.lower(), ('',''))[1]
+                        for key in self.targets]
+        front_values = [v for v in front_values if v]   # skip empty values
 
-        if hasattr(self, '_target_type'):
-            return self._target_type
+        # Save value for future requests
+        self._target_types_filled = self._get_keywords_by_category('+T',
+                                                                '',
+                                                                front_values,
+                                                                '_target_types')
+        # Check for an asteroid or comet ID
+        if self._target_types_filled == ['']:
+            if self.targets[0]:
+                target = self.targets[0]
+            elif len(self.targets) > 1:
+                target = self.targets[1]
+            else:
+                target = ''
 
-        # Return the target type for this target
-        target = self.target
-        if not target: return ''
+            if '/' in target:
+                self._target_types_filled = ['Comet']
 
-        if target == 'Sun':
-            return 'Sun'
+            parts = target.split(' ')
+            if len(parts) > 1:
+                first = parts[0].strip()
+                if first.startswith('('):
+                    first = first[1:-1]
+                try:
+                    k = int(first)
+                    self._target_types_filled = ['Asteroid']
+                except ValueError:
+                    pass
 
-        if target in GalleryPage.PLANET_NAMES:
-            return 'Planet'
-
-        target_lc = target.lower()
-        if target in PLANET_FROM_TARGET:
-            return PLANET_FROM_TARGET[target_lc][1]
-
-        # Try some string matches
-        if ' ring' in target_lc:
-            return 'Ring'
-
-        if ' gap' in target_lc or ' division' in target_lc:
-            return 'Gap'
-
-        if ' arc' in target_lc:
-            return 'Arc'
-
-        # If there is only one target type, return it
-        if len(self.target_types) == 1:
-            return self.target_types[0]
-
-    @property
-    def planets(self):
-        """A list of the names of the central planets associated with any
-        targets."""
-
-        return self._get_keywords_by_suffix('+p', '_planets')
+        return self._target_types_filled
 
     @property
-    def planet(self):
-        """The primary central planet associated with the image."""
+    def systems(self):
+        """A list of the names of the planetary systems associated with any
+        targets. The primary system comes first. If unknown or not applicable,
+        then the list begins with ''. """
 
-        if hasattr(self, '_planet'):
-            return self._planet
+        # Return saved value if present
+        if hasattr(self, '_systems_filled'):
+            return self._systems_filled
 
-        # Return the planet for this target, if any
-        target_lc = self.target.lower()
-        if target_lc in PLANET_FROM_TARGET:
-            return PLANET_FROM_TARGET[target_lc][0]
+        front_values = [SYSTEM_FROM_TARGET.get(key.lower(), ('',''))[0]
+                        for key in self.targets]
 
-        # If there is only one planet, return it
-        if len(self.planets) == 1:
-            return self.planets[0]
-
-        return ''
+        # Save value for future requests
+        self._systems_filled = self._get_keywords_by_category('+s', '',
+                                                              front_values,
+                                                              '_systems')
+        return self._systems_filled
 
     @property
     def dates(self):
         """A list of dates associated with the caption, in 'yyyy-mm-dd' format.
-        """
+        The primary date comes first. If the primary date is unknown, the list
+        begins with ''."""
+
+        # Return saved value if present
+        if hasattr(self, '_dates_filled'):
+            return self._dates_filled
 
         # If the value is a subclass attribute, return it
         if hasattr(self, '_dates'):
             return self._dates
 
         # Cache the result the first time this is called
-        if not hasattr(self, '_dates'):
-            self._dates = find_dates(self._date_search_text)
+        self._dates = find_dates(self._date_search_text)
 
-        return self._dates
+        # Take a guess that the earliest date is the primary date, so we leave
+        # the returned dates in sort order.
 
-    @property
-    def acquisition_date(self):
-        """The date the image was acquired, in 'yyyy-mm-dd' format; an empty
-        string if unknown."""
+        # If the primary date has been defined by the subclass, use it
+        if hasattr(self, '_primary_date'):
+            primary_date = self._primary_date
 
-        # If the value is a subclass attribute, return it
-        if hasattr(self, '_acquisition_date'):
-            return self._acquisition_date
+            if primary_date is self._dates:
+                self._dates.remove(primary_date)
 
-        # It is just a guess that the acquisition date is the earliest date that
-        # appears in the caption
-        if self.dates:
-            return self.dates[0]
-        else:
-            return ''
+            self._dates = [primary_date] + self._dates
+
+        if len(self._dates) == 0:
+            self._dates = ['']
+
+        # Save value for future requests
+        self._dates_filled = self._dates
+        return self._dates_filled
 
     ############################################################################
     # Internal properties; overrides by subclasses are generally unnecessary
@@ -318,8 +513,10 @@ class GalleryPage(object):
 
         # If the search text was not already defined, fill in the default
         if not hasattr(self, '_keyword_search_text_defined'):
-            self._keyword_search_text_defined = (self.title + '\r\r' +
-                                                 self.caption_text + '\r\r' +
+            title = self.title.replace('Moon', 'moon')
+                    # Avoid being fooled by capitalization of title!
+            self._keyword_search_text_defined = (title + '\n\n' +
+                                                 self.caption_text + '\n\n' +
                                                  self.background_text)
 
         return self._keyword_search_text_defined
@@ -361,8 +558,10 @@ class GalleryPage(object):
 
         # Cache the result the first time this is called
         if not hasattr(self, '_keywords_with_suffixes_from_title_found'):
+            title = self.title.replace('Moon', 'moon') 
+                # Avoid being fooled by capitalization of title!
             self._keywords_with_suffixes_from_title_found = \
-                                        find_keywords(self.title)
+                                        find_keywords(title)
 
         return self._keywords_with_suffixes_from_title_found
 
@@ -383,6 +582,242 @@ class GalleryPage(object):
         """Define the text that is to be searched for dates."""
 
         self._date_search_text_defined = text
+
+    ############################################################################
+    # Tools to standardize keyword values
+    ############################################################################
+
+    @staticmethod
+    def full_detector_name(name):
+
+        key = name.lower()
+        if key in DETECTOR_FULL_NAMES:
+            return DETECTOR_FULL_NAMES[key]
+
+        if '(' in key:
+            abbrev = key.partition('(')[2]
+            abbrev = abbrev.partition(')')[0]
+            if abbrev in DETECTOR_FULL_NAMES:
+                return DETECTOR_FULL_NAMES[abbrev]
+
+        return ''   # no detector specified
+
+    @staticmethod
+    def full_instrument_name(name):
+
+        key = name.lower()
+        if key in INSTRUMENT_FULL_NAMES:
+            return INSTRUMENT_FULL_NAMES[key]
+
+        if '(' in key:
+            abbrev = key.partition('(')[2]
+            abbrev = abbrev.partition(')')[0]
+            if abbrev in INSTRUMENT_FULL_NAMES:
+                return INSTRUMENT_FULL_NAMES[abbrev]
+
+        return name
+
+    @staticmethod
+    def full_host_name(name):
+
+        key = name.lower()
+        if key in HOST_FULL_NAMES:
+            return HOST_FULL_NAMES[key]
+
+        return name
+
+    @staticmethod
+    def full_mission_name(name):
+
+        key = name
+        if key in MISSION_FULL_NAMES:
+            return MISSION_FULL_NAMES[key]
+
+        return name
+
+    @staticmethod
+    def full_target_name(name):
+
+        key = name.lower()
+        if key in TARGET_FULL_NAMES:
+            return TARGET_FULL_NAMES[key]
+
+        return name
+
+    ############################################################################
+    # Jekyll output
+    ############################################################################
+
+    def _write_jekyll(self, filepath, remote_keys, replacements):
+        """Write Jekyll file.
+
+        remote_keys is a list of keys identifying links to remote versions.
+
+        replacements is a list of tuples (pattern, replacement) which are 
+        applied to the text prior to writing. Pattern is a regular expression
+        and replacement is the associated replacement string."""
+
+        with open(filepath, 'w') as f:
+
+            # Write Jekyll header
+            escaped = self.title.encode('ascii', 'xmlcharrefreplace')
+
+            f.write('---\n')
+            f.write('layout: base\n')
+            f.write('layout_style: wide\n')
+            f.write('title: "%s: %s"\n' % (self.id,
+                                           escaped.replace('"', '\\"')))
+            f.write('---\n\n')
+
+            # Write title
+            f.write('# %s\n\n' % escaped)
+
+            # Include small image with a link to a larger one
+            f.write('[![%s: %s](%s)](%s)\n\n' % (self.id, escaped,
+                                                 self.local_small_url,
+                                                 self.local_medium_url))
+
+            # Include external links to more versions
+            for key in remote_keys:
+                try:
+                    (url, shape, size) = self.remote_version_info[key]
+                except KeyError:
+                    continue
+
+                f.write('[%s](%s) ' % (key, url))
+                if shape:
+                    f.write('(%d x %d) ' % shape)
+                if size:
+                    if size >= 1.e6:
+                        f.write('(%.1f MB)' % (size/1.e6))
+                    else:
+                        f.write('(%.1f kB)' % (size/1000.))
+
+                f.write('\n\n')
+
+            # Write caption
+            f.write('**Caption:**\n\n')
+
+            text = self.caption_soup.prettify()
+            text = text.encode('ascii', 'xmlcharrefreplace')
+            for (pattern, repl) in replacements:
+                text = pattern.sub(repl, text)
+
+            f.write(text)
+            f.write('\n\n')
+
+            # Write background info if available
+            if self.background_text:
+
+                f.write('**Background Info:**\n\n')
+
+                text = self.background_soup.prettify()
+                text = text.encode('ascii', 'xmlcharrefreplace')
+                for (pattern, repl) in replacements:
+                    text = pattern.sub(repl, text)
+
+                f.write(text)
+                f.write('\n\n')
+
+            # Write a table of keywords
+            f.write('**Cataloging Keywords:**\n\n')
+
+            f.write("""<table>
+                          <tr>
+                            <th>Name</th>
+                            <th>Value</th>
+                            <th>Additional References</th>
+                          </tr>
+                    """)
+
+            names = ['Target',
+                     'System',
+                     'Target Type',
+                     'Mission',
+                     'Instrument Host',
+                     'Host Type',
+                     'Instrument',
+                     'Detector',
+                     'Extra Keywords',
+                     'Date in Caption',
+                     'Release Date',
+                     'Image Credit',
+                     'Source'
+            ]
+
+            if self.dates:
+                date = self.dates[0]
+                other_dates = self.dates[1:]
+            else:
+                date = ''
+                other_dates = []
+
+            keywords_used = set()
+            keywords_used |= set(self.targets)
+            keywords_used |= set(self.systems)
+            keywords_used |= set(self.target_types)
+            keywords_used |= set(self.missions)
+            keywords_used |= set(self.hosts)
+            keywords_used |= set(self.host_types)
+            keywords_used |= set(self.instruments)
+            keywords_used |= set(self.detectors)
+            keywords = set(self.keywords) - keywords_used
+
+            if self.is_movie:
+                keywords.add('Movie')
+            if self.is_color:
+                keywords.add('Color')
+            if self.is_grayscale:
+                keywords.add('Grayscale')
+
+            keywords = list(keywords)
+            keywords.sort()
+
+            if '//' in self.origin_url:
+                display_url = self.origin_url.split('//')[1]
+            else:
+                display_url = self.origin_url
+
+            values = [[self.targets[0],      ', '.join(self.targets[1:])],
+                      [self.systems[0],      ', '.join(self.systems[1:])],
+                      [self.target_types[0], ', '.join(self.target_types[1:])],
+                      [self.missions[0],     ', '.join(self.missions[1:])],
+                      [self.hosts[0],        ', '.join(self.hosts[1:])],
+                      [self.host_types[0],   ', '.join(self.host_types[1:])],
+                      [self.instruments[0],  ', '.join(self.instruments[1:])],
+                      [self.detectors[0],    ', '.join(self.detectors[1:])],
+                      ', '.join(keywords),
+                      [date,                 ', '.join(other_dates)],
+                      self.release_date,
+                      self.credit,
+                      '<a href="%s" target="_blank">%s</a>' % (self.origin_url,
+                                                               display_url)
+            ]
+
+            for (name, value) in zip(names, values):
+                if isinstance(value, (str,unicode)):
+                    value = value.encode('ascii', 'xmlcharrefreplace')
+                    f.write("""<tr>
+                                 <td style="text-align:right">%s</td>
+                                 <td style="text-align:left" colspan="2">%s</td>
+                               </tr>
+                            """ % (name,
+                                   value.encode('ascii', 'xmlcharrefreplace'))
+                           )
+                else:
+                    val0 = value[0].encode('ascii', 'xmlcharrefreplace')
+                    val1 = value[1].encode('ascii', 'xmlcharrefreplace')
+                    f.write("""<tr>
+                                 <td style="text-align:right">%s</td>
+                                 <td style="text-align:left">%s</td>
+                                 <td style="text-align:left">%s</td>
+                               </tr>
+                            """ % (name,
+                                   val0.encode('ascii', 'xmlcharrefreplace'),
+                                   val1.encode('ascii', 'xmlcharrefreplace'))
+                           )
+   
+            f.write('</table>\n\n')
 
 ################################################################################
 # Date identification support
@@ -525,7 +960,10 @@ def find_keywords(text):
             keywords_followed.add(groupname)
 
             # If it does not define a subgroup, skip it
-            if groupname not in KEYWORDS: continue
+            key = groupname.partition('+')[0]
+            if key in keywords_followed: continue
+            if key not in KEYWORDS: continue
+            keywords_followed.add(key)
 
             # Augment the list of additional keywords
             found_in_subgroups |= find_keywords1(groupname)
@@ -536,37 +974,5 @@ def find_keywords(text):
         # If the list has not expanded on this iteration, we're done
         if len(keywords_found) == nfound:
             return keywords_found
-
-################################################################################
-# Jekyll output
-################################################################################
-
-#     def write_jekyll_header(file, title)
-#         """Write the header of the Jekyll file. The file is assumed to already
-#         be open for write."""
-# 
-#         file.write('---\r')
-#         file.write('layout: base\r')
-#         file.write('layout_style: default\r')
-#         file.write('title: "%s"\r' % self.title)
-#         file.write('---\r\r')
-#         file.write('# %s\r\r' % self.title)
-# 
-#     def write_jekyll_caption(file, caption)
-#         """Write the caption into the Jekyll file. The file is assumed to be
-#         open for write already."""
-# 
-#         file.write('**Caption:**\r\r')
-#         file.write(self.caption_soup.prettify())
-# 
-#     def write_jekyll_background(file, background)
-#         """Write the background information of the Jekyll file. The file is
-#         assumed to be open for write already."""
-# 
-#         if se
-#         file.write('**Background Info:**\r\r')
-#         file.write(self.caption_soup.prettify())
-
-
 
 ################################################################################
