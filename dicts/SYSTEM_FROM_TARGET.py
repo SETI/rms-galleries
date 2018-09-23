@@ -1,3 +1,14 @@
+################################################################################
+# dicts/SYSTEM_FROM_TARGET.py
+#
+# Usage:
+#   from SYSTEM_FROM_TARGET import SYSTEM_FROM_TARGET
+#
+# SYSTEM_FROM_TARGET is a dictionary that translates the lower-case name or
+# abbreviation of a target to a tuple containing its associated system name and
+# target type.
+################################################################################
+
 SYSTEM_FROM_TARGET = {
     'earth'             : ('Earth', 'Earth'),
     'moon'              : ('Earth', 'Satellite'),
@@ -217,3 +228,6 @@ SYSTEM_FROM_TARGET = {
     'tempel 1'          : ('Periodic Comets', 'Comet'),    # non-standard comet names
     'halley'            : ('Periodic Comets', 'Comet'),
 }
+
+################################################################################
+

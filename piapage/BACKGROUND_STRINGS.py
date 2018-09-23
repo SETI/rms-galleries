@@ -1,10 +1,49 @@
+################################################################################
+# piapage/BACKGROUND_STRINGS.py
+#
+# This is a list of character strings that might appear in a paragraph of the
+# caption. If any of these is a substring of the caption, then the whole
+# paragraph is declared to be background information.
+#
+# Usage:
+#   from background_strings import BACKGROUND_STRINGS
+#
+################################################################################
+
 BACKGROUND_STRINGS = [
+#     "The THEMIS VIS camera is capable of capturing color images",
+    "The scientific imaging system, OSIRIS, was built by a consortium",
+    "The Cassini/Huygens spacecraft, launched from Earth in 1997",
+    "The Cassini-Huygens mission is a cooperative project of NASA",
+#     "Initial image processing and calibration by THEMIS team members",
+    "InSight, for Interior Exploration Using Seismic Investigations, Geodesy and Heat Transport",
+    "The Odyssey spacecraft has spent over 15 years in orbit around Mars",
+    "the first spacecraft ever to orbit the planet Mercury",
+    "the first spacecraft ever to orbit Mercury",
+#     "This image was acquired as part of MDIS's",
+#     "This image was acquired as part of the MDIS",
+#     "THEMIS visual image has not been radiometrically",
+#     "The THEMIS VIS camera contains 5 filters",
+#     "This image was acquired as a high-resolution",
+#     "This color treatment is the result of a collaboration between",
+    "NASA and Arizona State University s Mars Education Program",
+    "The scientific imaging system, OSIRIS, was built by a consortium",
+    "Color images from HiRISE combine information from detectors",
+    "Rosetta NAVCAM image use is available under",
+    "Mars 2020 is targeted for launch in July",
+    "OSIRIS was built by a consortium led by",
+#     "Welcome to another brief interval of THEMIS Images as Art",
+    "MESSENGER became the first spacecraft ever to orbit the planet Mercury",
+    "The Odyssey spacecraft has completed a full Mars year of observations of the red planet",
+#     "This image was acquired as a high-resolution targeted color observation",
+    "The Odyssey spacecraft has completed a full Mars year of observations",
+#     "The THEMIS VIS camera is capable of capturing color images",
     "is conducted by the Jet Propulsion Laboratory for NASA",
     "managed by the Jet Propulsion Laboratory for the NASA",
     "managed and controlled by the Jet Propulsion Laboratory for NASA",
-    "managed by the Jet Propulsion Laboratory for NASA"
+    "managed by the Jet Propulsion Laboratory for NASA",
     "The Jet Propulsion Laboratory's Mars Surveyor Operations Project operates",
-    "JPL managed the Voyager Project for NASA's Office of Space Science"
+    "JPL managed the Voyager Project for NASA's Office of Space Science",
     "for details on crediting THEMIS images",
     "For more information about the mission, go to",
     "For more information about MAVEN, visit",
@@ -30,7 +69,7 @@ BACKGROUND_STRINGS = [
     "The final data transmission received from Pathfinder",
     "With its 14 spectral bands from the visible to the thermal infrared",
     "For a complete list of Dawn mission participants, visit",
-    "JunoCam's raw images are available at"
+    "JunoCam's raw images are available at",
     "For more information on the U.S. instruments aboard Rosetta",
     "was built jointly by JPL and NASA",
     "Aquarius will provide new insights",
@@ -41,7 +80,7 @@ BACKGROUND_STRINGS = [
     "JPL hosts the Center for",
     "is a facility of the National Science",
     "For more information on Aura",
-    "will provide global color and stereo coverage"
+    "will provide global color and stereo coverage",
     "Astronomers study weather phenomena on other planets",
     "funds the LDSD mission",
 #     "The Cassini orbiter has revealed many surprises",
@@ -71,7 +110,7 @@ BACKGROUND_STRINGS = [
     "The Gravity Recovery and Interior Laboratory (GRAIL) mission utilizes",
     "instrument is managed by NASA",
     "is managed for NASA",
-    "The WISE spacecraft was put into hibernation"
+    "The WISE spacecraft was put into hibernation",
     "managed by JPL",
 #     "Opportunity landed on",
 #     "For more information:",
@@ -85,7 +124,7 @@ BACKGROUND_STRINGS = [
     "The MESSENGER spacecraft is the first",
     "The Galaxy Evolution Explorer launched on",
     "is managed by Caltech",
-#     "has been prepared for launch"
+#     "has been prepared for launch",
     "is on course to reach",
     "instrument was built by",
     "mission is a joint project between",
@@ -106,7 +145,7 @@ BACKGROUND_STRINGS = [
     "The spacecraft has been orbiting Mars since",
     "Please see the THEMIS Data Citation Note",
     "GRAIL's prime and extended science missions",
-    "MISR views Earth with nine cameras",
+#     "MISR views Earth with nine cameras",
 #     "MISR observes the daylit Earth",
     "More information about the Diviner instrument",
     "for details on crediting THEMIS images",
@@ -116,7 +155,7 @@ BACKGROUND_STRINGS = [
     "For information about NASA and agency programs on the Web",
     "With its 14 spectral bands from the visible to the thermal infrared",
     "The Mars Science Laboratory spacecraft is being prepared for launch",
-    "JPL is a division of the Caltech in Pasadena, California."
+    "JPL is a division of the Caltech in Pasadena, California.",
     "information about the Mars Reconnaissance Orbiter are available online at",
     "For information about NASA and agency programs on the Web",
     "For more information on the Kepler and the K2 mission",
@@ -193,8 +232,8 @@ BACKGROUND_STRINGS = [
     "Surrogate received support from",
     "WISE is an all-sky survey",
     "Mariner 4 was launched on",
-    "which took this image",
-    "This image taken by the hazard",
+#     "which took this image",
+#     "This image taken by the hazard",
     "More information about the Kepler mission",
     "Opportunity completed its three-month",
     "Dawn is due to be captured",
@@ -500,3 +539,5 @@ BACKGROUND_STRINGS = [
     "with its industrial partner, Lockheed Martin Astronautics",
     "with science instruments provided by consortia of European institutes",
 ]
+
+################################################################################

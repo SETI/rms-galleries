@@ -7,27 +7,38 @@
 # Andrew Lin & Mark Showalter
 ################################################################################
 
+import os
 import re
 import julian
 
-# Dictionaries used to standardize keyword values
-from system_from_target       import SYSTEM_FROM_TARGET
-from mission_from_host        import MISSION_FROM_HOST
-from host_from_instrument     import HOST_FROM_INSTRUMENT
-from instrument_from_detector import INSTRUMENT_FROM_DETECTOR
+################################################################################
+# Load dictionaries used to standardize keyword values
+from dicts import *
 
-from target_full_names      import TARGET_FULL_NAMES
-from mission_full_names     import MISSION_FULL_NAMES
-from host_full_names        import HOST_FULL_NAMES
-from instrument_full_names  import INSTRUMENT_FULL_NAMES
-from detector_full_names    import DETECTOR_FULL_NAMES
+# Compile regular expressions for KEYWORDS
+compiled = {}
+for (category, pairs) in KEYWORDS.iteritems():
+    new_pairs = []
+
+    for (regex, values) in pairs:
+        new_pairs.append((re.compile(regex), values))
+
+    compiled[category] = new_pairs
+
+KEYWORDS = compiled
+################################################################################
 
 class GalleryPage(object):
 
-    PLANET_NAMES = ['Mercury', 'Venus', 'Mars', 'Jupiter',
-                    'Saturn', 'Uranus', 'Neptune']
+    PLANET_NAMES = ['Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus',
+                    'Neptune']
 
-    LOCAL_ROOT_ = '/galleries/'
+    PRESS_RELEASES_SUBDIR_ = 'press_releases/'
+    GALLERIES_SUBDIR_      = 'galleries/'
+    DOCUMENTS_FILE_ROOT_   = '/Library/WebServer/Documents/'
+
+    root = os.environ['JEKYLLPATH']
+    JEKYLL_ROOT_ = root.rstrip('/') + '/website_galleries/'
 
     # Null constructor
     def __init__(self):
@@ -40,11 +51,6 @@ class GalleryPage(object):
         self.id = ''        # Unique identifier for this product, e.g., PIA12345
         self.origin_url     # The remote URL of the source of this press release
 
-        self.title = ''     # Title of page with optional HTML formatting
-        self.credit = ''    # Credit info with optional HTML formatting
-        self.release_date = ''
-                            # Release date in yyyy-mm-dd format if available
-        self.xrefs = []     # A list of IDs of products referenced by this one
         self.caption_soup = None
                             # The caption represented as BeautifulSoup
         self.background_soup = None
@@ -52,6 +58,42 @@ class GalleryPage(object):
                             # BeautifulSoup. Background information refers to
                             # descriptions of the mission, instrument, etc. that
                             # is not unique to this page.
+
+        self.title = ''     # Title of page with optional HTML formatting
+        self.credit = ''    # Credit info with optional HTML formatting
+        self.release_date = ''
+                            # Release date in yyyy-mm-dd format if available
+        self.acquisition_date = ''
+                            # Image acquisition date in yyyy-mm-dd format if
+                            # available
+        self.xrefs = []     # A list of IDs of products referenced by this one
+        self.is_movie = False
+                            # True if this is a movie
+        self.is_color = False
+                            # True if this is known to be in color
+        self.is_grayscale = False
+                            # True if this product is known to be in black and
+                            # white.
+        self.is_planetary = False
+                            # True if this product relates to the solar system.
+        self.shape = (1,1)  # (width, height) of the full-size product.
+        self.thumbnail_shape = None
+                            # (width, height) of the thumbnail product if
+                            # available.
+
+        # Paths on local website
+        self.local_medium_url   = ''
+        self.local_small_url    = ''
+        self.local_thumbnail_url= ''
+        self.local_page_url     = ''
+
+        # Source URL
+        self.origin_url         = ''
+
+        # A dictionary that returns (url, shape, size) given a key such as
+        # "Full-size TIFF". shape is a tuple (w,h). size is in bytes. Both can
+        # be None if unknown.
+        self.remote_version_info = {}
 
     ############################################################################
     # Properties for which overrides by subclasses are optional. Default
@@ -62,9 +104,9 @@ class GalleryPage(object):
     @staticmethod
     def soup_as_text(soup):
         if hasattr(soup, 'contents'):
-            return ''.join([GalleryPage.soup_as_text(s) for s in soup.contents])
-
-        if hasattr(soup, 'text'):
+            text = ' '.join([GalleryPage.soup_as_text(s)
+                             for s in soup.contents])
+        elif hasattr(soup, 'text'):
             text = soup.text
         elif hasattr(soup, 'string'):
             text = soup.string
@@ -72,7 +114,14 @@ class GalleryPage(object):
             text = ''
 
         text = text.strip()
-        text = text.replace('\r', ' ').replace('\n', ' ').replace('  ', ' ')
+        text = text.replace('\r', ' ').replace('\n', ' ')
+        text = str(text.encode('ascii', 'xmlcharrefreplace'))
+
+        while '  ' in text:
+            text = text.replace('  ', ' ')
+
+        text = text.replace(' .','.').replace(' ,', ',')
+
         return text
 
     @property
@@ -131,8 +180,8 @@ class GalleryPage(object):
         identified, the first item in the list is blank.
 
         The list is constructed as follows.
-        1. If front_attr is defined and self has this attribute, the first name
-           on this list starts (and is primary) on the returned list.
+        1. If front_attr is defined and self has an attribute by this name, the
+           first name on this list starts (and is primary) on the returned list.
         2. If the list is to be returned is still empty and front_values is not
            an empty list, the first item on this list becomes the first item on
            the returned list.
@@ -140,9 +189,10 @@ class GalleryPage(object):
            list.
         4. Next, a list constructed by scraping keywords with the specified
            suffix (e.g., "+t" for targets) is appended.
-        5. Finally, if tail_attr is defined and self has this attribute, then
-           it contains a list of names appended to the end of the list. Items
-           beginning with "-" are removed from the list if present.
+        5. Finally, if tail_attr is defined and self has an attribute by this
+           name, then it contains a list of names appended to the end of the
+           list. A leading minus sign "-" instead indicates that this keyword is
+           to be removed from the list if present.
 
         Use front_attr and front_values to define the primary.
 
@@ -249,7 +299,7 @@ class GalleryPage(object):
         if hasattr(self, '_missions_filled'):
             return self._missions_filled
 
-        front_values = [MISSION_FROM_HOST.get(key,(key,''))[0]
+        front_values = [MISSION_FROM_HOST.get(key.lower(), (key,''))[0]
                         for key in self.hosts]
         front_values = [v for v in front_values if v]   # skip empty values
 
@@ -270,7 +320,7 @@ class GalleryPage(object):
         if hasattr(self, '_host_types_filled'):
             return self._host_types_filled
 
-        front_values = [MISSION_FROM_HOST.get(key,('',''))[1]
+        front_values = [MISSION_FROM_HOST.get(key.lower(), ('',''))[1]
                         for key in self.hosts]
         front_values = [v for v in front_values if v]   # skip empty values
 
@@ -629,7 +679,7 @@ class GalleryPage(object):
     @staticmethod
     def full_mission_name(name):
 
-        key = name
+        key = name.lower()
         if key in MISSION_FULL_NAMES:
             return MISSION_FULL_NAMES[key]
 
@@ -648,43 +698,91 @@ class GalleryPage(object):
     # Jekyll output
     ############################################################################
 
-    def _write_jekyll(self, filepath, remote_keys, replacements):
+    def _write_jekyll(self, filepath, remote_keys, replacements,
+                            neighbors=None):
         """Write Jekyll file.
 
         remote_keys is a list of keys identifying links to remote versions.
 
-        replacements is a list of tuples (pattern, replacement) which are 
+        replacements is a list of tuples (pattern, replacement) which are
         applied to the text prior to writing. Pattern is a regular expression
         and replacement is the associated replacement string."""
+
+        parent = os.path.split(os.path.abspath(filepath))[0]
+        if not os.path.exists(parent):
+            os.makedirs(parent)
 
         with open(filepath, 'w') as f:
 
             # Write Jekyll header
             escaped = self.title.encode('ascii', 'xmlcharrefreplace')
+            escaped_unquoted = escaped.replace('"', '&quot;')
 
             f.write('---\n')
             f.write('layout: base\n')
-            f.write('layout_style: wide\n')
-            f.write('title: "%s: %s"\n' % (self.id,
-                                           escaped.replace('"', '\\"')))
+            f.write('layout_style: default\n')
+            f.write('title: "%s: %s"\n' % (self.id, escaped_unquoted))
             f.write('---\n\n')
+
+            f.write('<style>\n')
+            f.write('#noborder {\n')
+            f.write('    border: 0;\n')
+            f.write('}\n')
+            f.write('img {\n')
+            f.write('    margin: auto;\n')
+            f.write('    width: auto;\n')
+            f.write('    height: auto;\n')
+            f.write('    max-width: 1200px;\n')
+            f.write('    max-height: 800px;\n')
+            f.write('}\n')
+            f.write('</style>\n\n')
+
+            # Neighbor navigation mainly for debugging
+            written = False
+            if neighbors and neighbors[0]:
+                f.write('[prev](%s)\n' % neighbors[0])
+                written = True
+
+            if neighbors and neighbors[1]:
+                f.write('[next](%s)\n' % neighbors[1])
+                written = True
+
+            if written:
+                f.write('\n\n')
+
+            # Include small image with a link to a larger one
+            f.write('<table width="840px">\n')
+            f.write('<tr id="noborder">\n')
+            f.write('<td id="noborder" style="text-align:center;">\n')
+            f.write('<a href="%s">\n' % self.local_medium_url)
+            f.write('  <img src="%s"\n' % self.local_small_url)
+            f.write('       alt="%s: %s" />\n' % (self.id, escaped_unquoted))
+            f.write('</a>\n\n')
+            f.write('</td>\n')
+            f.write('</tr>\n')
+            f.write('</table>\n\n')
+
+            f.write('<br clear="left" />\n\n')
 
             # Write title
             f.write('# %s\n\n' % escaped)
 
-            # Include small image with a link to a larger one
-            f.write('[![%s: %s](%s)](%s)\n\n' % (self.id, escaped,
-                                                 self.local_small_url,
-                                                 self.local_medium_url))
-
             # Include external links to more versions
+            f.write(' * Click the [image above](%s) for a larger view\n' %
+                                                self.local_medium_url)
+
             for key in remote_keys:
+                if 'movie' in key.lower():
+                    icon = '<img src="/icons-local/movie_icon.png" /> '
+                else:
+                    icon = ''
+
                 try:
                     (url, shape, size) = self.remote_version_info[key]
                 except KeyError:
                     continue
 
-                f.write('[%s](%s) ' % (key, url))
+                f.write(' * %s[%s](%s) ' % (icon, key, url))
                 if shape:
                     f.write('(%d x %d) ' % shape)
                 if size:
@@ -693,10 +791,12 @@ class GalleryPage(object):
                     else:
                         f.write('(%.1f kB)' % (size/1000.))
 
-                f.write('\n\n')
+                f.write('\n')
+
+            f.write('\n')
 
             # Write caption
-            f.write('**Caption:**\n\n')
+            f.write('<h3>Caption:</h3>\n\n')
 
             text = self.caption_soup.prettify()
             text = text.encode('ascii', 'xmlcharrefreplace')
@@ -709,7 +809,7 @@ class GalleryPage(object):
             # Write background info if available
             if self.background_text:
 
-                f.write('**Background Info:**\n\n')
+                f.write('<h3>Background Info:</h3>\n\n')
 
                 text = self.background_soup.prettify()
                 text = text.encode('ascii', 'xmlcharrefreplace')
@@ -720,13 +820,13 @@ class GalleryPage(object):
                 f.write('\n\n')
 
             # Write a table of keywords
-            f.write('**Cataloging Keywords:**\n\n')
+            f.write('<h3>Cataloging Keywords:</h3>\n\n')
 
             f.write("""<table>
                           <tr>
                             <th>Name</th>
                             <th>Value</th>
-                            <th>Additional References</th>
+                            <th>Additional Values</th>
                           </tr>
                     """)
 
@@ -739,10 +839,12 @@ class GalleryPage(object):
                      'Instrument',
                      'Detector',
                      'Extra Keywords',
-                     'Date in Caption',
+                     'Acquisition Date',
                      'Release Date',
+                     'Date in Caption',
                      'Image Credit',
-                     'Source'
+                     'Source',
+                     'Identifier'
             ]
 
             if self.dates:
@@ -787,11 +889,13 @@ class GalleryPage(object):
                       [self.instruments[0],  ', '.join(self.instruments[1:])],
                       [self.detectors[0],    ', '.join(self.detectors[1:])],
                       ', '.join(keywords),
-                      [date,                 ', '.join(other_dates)],
+                      self.acquisition_date,
                       self.release_date,
+                      [date,                 ', '.join(other_dates)],
                       self.credit,
                       '<a href="%s" target="_blank">%s</a>' % (self.origin_url,
-                                                               display_url)
+                                                               display_url),
+                      self.id,
             ]
 
             for (name, value) in zip(names, values):
@@ -817,7 +921,8 @@ class GalleryPage(object):
                                    val1.encode('ascii', 'xmlcharrefreplace'))
                            )
    
-            f.write('</table>\n\n')
+            f.write('</table>\n')
+            f.write('<br>\n')
 
 ################################################################################
 # Date identification support
@@ -890,22 +995,6 @@ def find_dates(text):
 ################################################################################
 # Keyword identification support
 ################################################################################
-# Load keywords and compile regular expressions
-
-from keywords import KEYWORDS
-
-compiled = {}
-for (category, pairs) in KEYWORDS.iteritems():
-    new_pairs = []
-
-    for (regex, values) in pairs:
-        new_pairs.append((re.compile(regex), values))
-
-    compiled[category] = new_pairs
-
-KEYWORDS = compiled
-
-########################################
 
 def find_keywords(text):
     """Return an alphabetical list of all the keywords found in the given

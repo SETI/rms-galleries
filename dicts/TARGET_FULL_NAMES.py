@@ -1,3 +1,13 @@
+################################################################################
+# dicts/TARGET_FULL_NAMES.py
+#
+# Usage:
+#   from TARGET_FULL_NAMES import TARGET_FULL_NAMES
+#
+# TARGET_FULL_NAMES is a dictionary that translates the lower-case name or
+# abbreviation of a target into its full name.
+################################################################################
+
 TARGET_FULL_NAMES = {
     'j rings'       : 'Jupiter Rings',
     's rings'       : 'Saturn Rings',
@@ -21,3 +31,5 @@ TARGET_FULL_NAMES = {
     's/2005 s 1'    : 'Anthe',
     's/2008 s 1'    : 'Aegaeon',
 }
+
+################################################################################

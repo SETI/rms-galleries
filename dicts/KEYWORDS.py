@@ -1,11 +1,14 @@
 ########################################################################################################################
-# keywords.py
+# dicts/KEYWORDS.py
 #
 # To use:
-#   from keywords import KEYWORDS
-########################################################################################################################
-
-# Format is (regular expression, (keywords)) where the keywords can contain string replacement patterns
+#   from KEYWORDS import KEYWORDS
+#
+# Dictionary strcuture used for scraping keywords from captions. Each dictionary value is a list of tuples
+#   (regular expression, [keywords])
+# where the list of keywords can contain grep string replacement patterns. If the regular expression matches any text
+# found in the caption, then the keywords provided are added to the list.
+#
 # Keywords can have suffixes indicating the type of the keyword:
 #   +t = Target
 #   +T = Target Type
@@ -15,6 +18,13 @@
 #   +H = Host Type
 #   +i = Instrument
 #   +d = Detector
+#
+# KEYWORDS is actually a dictionary keyed by a category. KEYWORDS['General'] is the list of keywords always searched.
+# Additional keys are used if and only if the key of that dictionary is also found as a keyword. For example, if
+# 'Saturn' is found among the keywords, then KEYWORDS['Saturn'] is also checked for matching text in the caption.
+#
+# This dictionary will need to be updated as new data sets are added to the gallery.
+########################################################################################################################
 
 KEYWORDS = {}
 
