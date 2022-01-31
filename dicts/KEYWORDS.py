@@ -161,6 +161,7 @@ KEYWORDS['General'] = [
 
     ('(MGS|MRO|MEX|MOC|MSL|MER|MAVEN)',     ['Mars+t', 'Planet+T']),
     ('Perseverance',                        ['Mars+t', 'Planet+T', 'Mars 2020+m', 'Perseverance+h', 'Rover+H']),
+    ('Ingenuity',                           ['Mars+t', 'Planet+T', 'Mars 2020+m', 'Ingenuity+h', 'Helicopter+H']),
     ('Phoenix',                             ['Mars+t', 'Planet+T', 'Phoenix+m', 'Phoenix Lander+h', 'Lander+H']),
     ('Viking',                              ['Mars+t', 'Planet+T', 'Viking+m']),
     ('(Viking [12]).*[Oo]rbit',             [r'\1 Orbiter+h', 'Orbiter+H']),
@@ -169,7 +170,7 @@ KEYWORDS['General'] = [
     ('Rosetta(?! [Ss]tone)(?! [Bb]ranch)',  ['Comet+T', 'Rosetta+m', 'Rosetta Orbiter+h', '67P/Churyumov-Gerasimenko+t', 'Orbiter+H', 'Periodic Comets+s']),
     ('Philae(?! [Ss]ulcus)',                ['Comet+T', 'Rosetta+m', '67P/Churyumov-Gerasimenko+t', 'Philae Lander+h', 'Lander+H', 'Periodic Comets+s']),
     ('Deep Impact',                         ['Comet+T', 'Deep Impact+m+h', '9P/Tempel+t', 'Impactor+H']),
-    ('HIFI',                                ['Comet+T', 'Herschel Space Observatory+m+h', 'Space Telescope+T', 'Heterodyne Instrument for the Far Infrared (HIFI)+i']),
+    ('HIFI',                                ['Comet+T', 'Herschel Space Observatory+m+h', 'Space Telescope+H', 'Heterodyne Instrument for the Far Infrared (HIFI)+i']),
     ('Dawn.{1,20}(mission|spacecraft)',     ['Asteroid+T', 'Main Belt+s', 'Dawn+m+h', 'Orbiter+H']),
     ('(Deep Space 1|DS1)',                  ['Deep Space 1+h', 'Deep Space 1 (DS1)+m', 'Flyby Spacecraft+H']),
     ('(NEAR|Near Earth.{1,30}Rendez)',      ['Asteroid+T', 'NEAR Shoemaker+m+h', 'Orbiter+H']),

@@ -105,60 +105,133 @@ of Technology in Pasadena, manages the mission....
 
 ### Gallery Deployment Procedure
 
-1. Make sure your ``PIAPATH`` environment variable points to ``PDS-Galleries/PIAxxxxx``.
-2. Make sure your ``JEKYLLPATH`` environment variable points to the ``SETI/PDS-website`` repo.
-   The program will create new Jekyll files inside the ``website_galleries`` subdirectory of
-   this repo. (Note that these files are managed separately from the other website files.)
-3. Be sure that the file ``PDS-Galleries/PIAxxxxx/PIAPAGE_CATALOG.pickle`` exists. If it does
-   not, this will necessarily be a brand new complete rather than an incremental deploy.
-4. If you don't want to write any newly retrieved JPEG files into ``/Library/Webserver/Documents``,
+1. Make sure your ``PIAPATH`` environment variable points to a local copy of the shared Dropbox
+   directory ``PDS-Galleries/PIAxxxxx``. I strongly recommend that you work on a local copy, and
+   then rsync it back to Dropbox when you are done. This avoids any chance of clobbering the copy
+   on Dropbox.
+2. Be sure that the file ``PDS-Galleries/PIAxxxxx/PIAPAGE_CATALOG.pickle`` has been copied from
+   Dropbox. If it is not present, this will necessarily be a full update rather than an incremental deploy.
+3. If you don't want to write any newly retrieved JPEG files into ``/Library/Webserver/Documents``,
    edit ``DOCUMENTS_FILE_ROOT_`` inside ``gallerypage.py``. For example, if you are deploying to
    the "8080" version of the website first, ``DOCUMENTS_FILE_ROOT_`` should point to
-   ``/Library/Webserver/Documents_8080`` instead.
-5. Right now, we are only tracking Photojournal pages up to 25999. If we have started to
+   ``/Library/Webserver/Documents_8080`` instead. (This could be set up using an environment
+   variable.)
+4. Right now, we are only tracking Photojournal pages up to 25999. If we have started to
    see pages above 25900 or so, edit ``piapage/MAX_PIAPAGE.py`` to specify a higher limit.
-6. ``cd`` to the ``pds-galleries`` directory.
-7. In an ipython2 session...
+5. ``cd`` to the ``pds-galleries`` repo directory.
+6. In an ipython2 session...
 
         import piapage
 
-8. For an incremental update:
+7. For an incremental update:
 
         catalog = piapage.build_catalog()
-        piapage.save_catalog()
+        piapage.save_catalog(catalog)
 
-9. Alternatively, for a full update:
+8. Alternatively, for a full update:
 
         catalog = piapage.build_catalog(incremental=False)
-        piapage.save_catalog()
+        piapage.save_catalog(catalog)
 
-At this point, the catalog file ``PDS-Galleries/PIAxxxxx/PIAPAGE_CATALOG.pickle``
-has been updated and the Jekyll files for individual products have been written into
-the ``website_galleries/press_releases`` subdirectory of the ``SETI/PDS-website`` repo.
+At this point,
+- the local catalog file ``PDS-Galleries/PIAxxxxx/PIAPAGE_CATALOG.pickle`` has been updated;
+- any Photojournal product pages that were not previously cached locally have been copied
+  into ``PDS-Galleries/PIAxxxxx``;
+- for any new Photojournal product pages, the thumbnail, small, and medium JPEGs have been
+  copied into ``/Library/WebServer/Documents/press_releases``;
+- the Jekyll files for individual products have been written into the ``jekyll/press_releases/pages``
+  subdirectory of this repo.
 
-10. To generate the new galleries, run this program at the comment line (not inside ipython):
+9. To generate the new galleries, run this program at the command line (not inside ipython):
 
         python2 piapage/piapage_galleries.py
 
-At this point, the Jekyll galleries have been written to the ``website_galleries/galleries``
-subdirectory of the ``SETI/PDS-website`` repo.
+At this point, the Jekyll galleries have been written to the ``jekyll/galleries``
+subdirectory of this repo.
 
-11. To process the Jekyll files and push the changes to the local website, use:
+10. Before you can process the Jekyll files and push the HTML to the local website, you need to create
+    links inside your local copy of the ``SETI/pds-website`` repo:
 
+        ln -s <abspath to this repo>/jekyll/galleries <abspath to pds-website repo>/website_galleries/galleries
+        ln -s <abspath to this repo>jekyll/press_releases <abspath to pds-website repo>/website_galleries/press_releases
+
+11. To deploy to your local copy of the website:
+
+        cd <path to pds-website repo>/deploy
         fab deploy localhost_galleries
 
 12. Alternatively, to deploy to the local "8080" version of the website:
 
+        cd <path to pds-website repo>/deploy
         fab deploy localhost_8080_galleries
 
-__NOTE__: This deploy procedure does not copy the local JPEG files from one site
-to another. To do that, use ``rsync`` to synchronize the ``press_release`` subdirectories
-of the website.
+13. Review the local website. Visit:
 
-13. If history is any guide, about 10% of the new images will have metadata that needs
+        https://localhost/galleries.html
+
+        https://localhost/galleries/mercury.html
+        https://localhost/galleries/venus.html
+        https://localhost/galleries/moon.html
+        https://localhost/galleries/mars.html
+        https://localhost/galleries/jupiter.html
+        https://localhost/galleries/saturn.html
+        https://localhost/galleries/uranus.html
+        https://localhost/galleries/neptune.html
+        https://localhost/galleries/pluto.html
+
+        https://localhost/galleries/asteroids.html
+        https://localhost/galleries/comets.html
+        https://localhost/galleries/kbos.html
+        https://localhost/galleries/exoplanets.html
+
+        https://localhost/galleries/target_mars.html
+        https://localhost/galleries/target_jupiter.html
+        https://localhost/galleries/target_saturn.html
+        https://localhost/galleries/target_uranus.html
+        https://localhost/galleries/target_neptune.html
+        https://localhost/galleries/target_pluto.html
+        https://localhost/galleries/asteroid_1_ceres.html
+        https://localhost/galleries/comet_1p_halley.html
+        https://localhost/galleries/kbo_pluto.html
+        https://localhost/galleries/exoplanet_55_cancri.html
+
+        https://localhost/galleries/cassini.html
+        https://localhost/galleries/voyager.html
+        https://localhost/galleries/juno.html
+        https://localhost/galleries/new_horizons.html
+        https://localhost/galleries/messenger.html
+        https://localhost/galleries/dawn.html
+        https://localhost/galleries/rosetta.html
+
+        https://localhost/galleries/cassini_jupiter.html
+        https://localhost/galleries/cassini_saturn.html
+        https://localhost/galleries/voyager_jupiter.html
+        https://localhost/galleries/voyager_saturn.html
+        https://localhost/galleries/voyager_uranus.html
+        https://localhost/galleries/voyager_neptune.html
+
+14. If history is any guide, about 10% of the new images will have metadata that needs
 to be repaired. The simplest way to handle a small number of repairs is to itemize
 the changes inside the ``REMOVALS`` dictionary inside ``repairs.py``. Just create a new
 dictionary entry keyed by the PIA code of the image. You can list extraneous keyword
-values to remove, or also specify new values to insert for the target, target type,
+values to remove, or specify new values to insert for the target, target type,
 mission, etc.
 
+15. Once you are satisfied with the results, deploy to the public servers. Note
+    that this command only works from a server that has a current, up to date
+    copy of the galleries and press releases.
+
+        cd <path to pds-website repo>/deploy
+        fab deploy server1_galleries
+        fab deploy server2_galleries
+
+16. Copy the new JPEGs to the servers by rsyncing the contents of these
+    directories (although we should really fix this):
+
+        /Library/WebServer/Documents/press_releases/thumbnails
+        /Library/WebServer/Documents/press_releases/small
+        /Library/WebServer/Documents/press_releases/medium
+
+17. Rsync your local copy of the ``PDS-Galleries/PIAxxxxx`` directory back to Dropbox.
+
+18. Commit your changes back to the repo on GitHub.

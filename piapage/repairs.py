@@ -612,7 +612,6 @@ REMOVALS = {
     'PIA24174': ('Moon', 'Satellite', 'Earth'),
     'PIA24175': ('Moon', 'Satellite', 'Earth'),
     'PIA24178': ('Voyager', 'Pioneer', 'Flyby'),
-    'PIA24435': ('Juno', 'Dawn', 'Cassini', 'Europa', 'Psyche', 'Jupiter', 'Main Belt', 'Asteroid', 'Satellite', 't+Mars', 'T+Planet'),
     'PIA24499': ('Moon', 'Satellite', 'Earth'),
     'PIA24178': ('Voyager', 'Pioneer', 'Flyby'),
     'PIA24526': ('Moon', 'Satellite', 'Earth'),
@@ -1213,5 +1212,13 @@ def repair_piapage(page):
         page._targets_filled.remove('Pluto')
         page._targets_filled = ['Pluto'] + page._targets_filled
         page._systems_filled = page._systems_filled[::-1]
+
+    if page.id == 'PIA24435':
+        page._targets_filled = ['Mars']
+        page._target_types_filled = ['Planet']
+        page._systems_filled =['']
+        page._missions_filled = ['Mars 2020', 'InSight']
+        page._hosts_filled = ['Perseverance', 'Ingenuity', 'InSight Lander']
+        page._host_types_filled = ['Rover', 'Helicopter', 'Lander']
 
 ################################################################################

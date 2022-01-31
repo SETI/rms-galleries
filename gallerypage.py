@@ -10,10 +10,23 @@
 import os
 import re
 import julian
+import inspect
 
 ################################################################################
 # Load dictionaries used to standardize keyword values
-from dicts import *
+import dicts                # used by "inspect.getfile" below
+from dicts import (
+    DETECTOR_FULL_NAMES,
+    HOST_FROM_INSTRUMENT,
+    HOST_FULL_NAMES,
+    HOST_INFO,
+    INSTRUMENT_FROM_DETECTOR,
+    INSTRUMENT_FULL_NAMES,
+    KEYWORDS,
+    MISSION_FULL_NAMES,
+    SYSTEM_FROM_TARGET,
+    TARGET_FULL_NAMES,
+)
 
 # Compile regular expressions for KEYWORDS
 KEYWORD_USAGE = {}
@@ -47,8 +60,8 @@ class GalleryPage(object):
     GALLERIES_SUBDIR_      = 'galleries/'
     DOCUMENTS_FILE_ROOT_   = '/Library/WebServer/Documents/'
 
-    root = os.environ['JEKYLLPATH']
-    JEKYLL_ROOT_ = root.rstrip('/') + '/website_galleries/'
+    # Define the absolute path to the local Jekyll directory
+    JEKYLL_ROOT_ = inspect.getfile(dicts).rpartition('dicts/')[0] + 'jekyll/'
 
     # Null constructor
     def __init__(self):
