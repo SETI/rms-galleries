@@ -52,8 +52,11 @@ print len([c for c in caption_list if c[0] > 1])
 print len([b for b in background_list if b[0] == 1]),
 print len([b for b in background_list if b[0] > 1])
 
-# 46273 2381
-# 621 834
+# # 46273 2381
+# # 621 834
+# 
+# 50202 2645
+# 678 894
 
 # [c for c in caption_list if c[0] > 1]
 # [b for b in background_list if b[0] <= 1]

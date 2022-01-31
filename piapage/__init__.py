@@ -29,6 +29,7 @@ from .GIF_PIAPAGES       import MEDIUM_GIF_PIAPAGES, \
                                 SMALL_GIF_PIAPAGES, \
                                 THUMBNAIL_GIF_PIAPAGES
 from .COLOR_VS_PIAPAGE   import COLOR_VS_PIAPAGE
+from piapage.repairs import repair_tables, repair_piapage
 
 from piapage.MAX_PIAPAGE import MAX_PIAPAGE
 
@@ -37,31 +38,38 @@ PARSER = 'lxml'
 PIA_REGEX = re.compile(r'PIA[0-9]{5}')
 YMD_REGEX = re.compile(r'[12][0-9]{3}-[01][0-9]-[0-3][0-9]$')
 
-REQUIRED_MISSIONS = set([
-    'Cassini-Huygens',
+# Any mission that starts with one of these is definitely planetary
+MISSIONS_ALWAYS_INCLUDED = set([
+    '2001 Mars Odyssey',
+    'Cassini',
+    'DART',
     'Dawn',
     'Deep Impact',
+    'Deep Space',
+    'Double Asteroid',  # DART
+    'EPOXI',
+    'ExoMars',
     'Galileo',
-    'Kepler',
+    'InSight',
     'Juno',
+    'Kepler',
     'Magellan',
     'Mariner',
+    'Mars ',
+    'MAVEN',
     'MESSENGER',
-    'NEAR Shoemaker',
+    'NEAR',
+    'NEOWISE',
     'New Horizons',
+    'OSIRIS-REx',
     'Phoenix',
+    'Pioneer',
+    'Psyche',
+    'Rosetta',
+    'Stardust',
+    'Surveyor',
     'Viking',
     'Voyager',
-])
-
-EXCLUDED_MISSIONS = set([
-    'Aqua',
-    'Aura',
-    'FINESSE',
-    'Galaxy Evolution Explorer (GALEX)',
-    'GALEX Orbiter',
-    'NuSTAR',
-    'UAVSAR'
 ])
 
 class PiaPage(GalleryPage):
@@ -74,6 +82,7 @@ class PiaPage(GalleryPage):
     PHOTOJOURNAL_URL = "https://" + PHOTOJOURNAL_DOMAIN
 
     MISSING_PAGE_TEXT = 'No images in our database met your search criteria'
+    BACK_TO_HOME_TEXT = 's.channel="Home"'
 
     root = os.environ['PIAPATH']
     CACHE_ROOT_ = root.rstrip('/') + '/'        # where to store cached HTML
@@ -196,130 +205,75 @@ class PiaPage(GalleryPage):
 
         # Get key information from the PIA page's table
         self.get_pia_tables()
-        missions    = self.pia_table.get('Mission', [])
-        hosts       = self.pia_table.get('Spacecraft', [])
-        instruments = self.pia_table.get('Instrument', [])
-        targets     = self.pia_table.get('Target Name', [])
+        missions    = self.pia_table.get('Mission', [''])
+        hosts       = self.pia_table.get('Spacecraft', [''])
+        instruments = self.pia_table.get('Instrument', [''])
+        targets     = self.pia_table.get('Target Name', [''])
+        systems     = self.pia_table.get('Is a satellite of', [''])
 
-        if targets and 'Sol' in targets[0]:
-            targets[0] = 'Sun'
+        # Fix known errors and weirdness in tables
+        (missions, hosts, instruments,
+         targets, systems) = repair_tables(missions, hosts, instruments,
+                                           targets, systems)
 
-        # Known errors in pages
-        if 'Comet' in targets and 'Rosetta' in missions:
-            targets[targets.index('Comet')] = '67P/Churyumov-Gerasimenko'
+        # Replace tabulated names with their full or corrected names
+        # Identify primary values
 
-        if 'Dawn' in missions and 'Field Experiment' in hosts:
-            hosts = ['Dawn']
-
-        if 'Mars Pathfinder (MPF)' in missions and 'Field Experiment' in hosts:
-            hosts.remove('Field Experiment')
-
-        if 'Hubble Space Telescope' in instruments:
-            instruments.remove('Hubble Space Telescope')
-            hosts += ['Hubble Space Telescope (HST)']
-
-        if 'MESSENGER' in missions and \
-           'Gamma-ray Spectrometer (GRS)' in instruments:
-                k = instruments.index('Gamma-ray Spectrometer (GRS)')
-                instruments[k] = 'Gamma-Ray and Neutron Spectrometer (GRNS)'
-
-        if self.id == 'PIA15485':
-            hosts.append('-Deep Impact')
-            missions.append('-Deep Impact')
-
-        if 'Mars Volcanic Emission Life Scout (MARVEL)' in instruments:
-            instruments.remove('Mars Volcanic Emission Life Scout (MARVEL)')
-
-        if 'VIRTIS' in instruments and 'Venus Express' in hosts:
-            hosts.remove('Venus Express')
-            self._primary_hosts = ['Venus Express']
-            hosts = ['Venus Express'] + hosts
-
-        if 'Cassini-Huygens' in missions and \
-           'Infrared Spectrometer' in instruments:
-                k = instruments.index('Infrared Spectrometer')
-                instruments[k] = 'Composite Infrared Spectrometer (CIRS)'
-
-        if 'Cassini-Huygens' in missions and \
-           'Infrared Spectrometer (IRS)' in instruments:
-                k = instruments.index('Infrared Spectrometer (IRS)')
-                instruments[k] = 'Composite Infrared Spectrometer (CIRS)'
-
-        if 'Visible Light' in instruments:
-            instruments.remove('Visible Light')
-
-        if 'Ultraviolet Light' in instruments:
-            instruments.remove('Ultraviolet Light')
-
-        # Order might matter here because certain properties depend on others
-
-        if instruments:
-            instruments = [GalleryPage.full_instrument_name(i)
-                           for i in instruments]
-            instruments = [str(i) for i in instruments]
-            self._primary_instruments = instruments     # assume instruments are
-                                                        # in primary order
-
-            # If any of these refer to known detectors, add them to the detector
-            # list
-            self._primary_detectors = []
-            for inst in instruments:
-                detector = GalleryPage.full_detector_name(inst)
-                if detector:
-                    self._primary_detectors.append(detector)
-
-        if hosts:
-            hosts = [GalleryPage.full_host_name(h) for h in hosts]
-            hosts = [str(h) for h in hosts]
-            if not self.instruments or not self.instruments[0]:
-                self._primary_hosts = hosts
-            self._hosts = hosts
-
-        if missions:
-            missions = [GalleryPage.full_mission_name(m) for m in missions]
-            missions = [str(m) for m in missions]
-            if not self.hosts or not self.hosts[0]:
-                self._primary_missions = missions
-            self._missions = missions
-
-        if targets:
-            targets = [GalleryPage.full_target_name(t) for t in targets]
-            targets = [str(t) for t in targets]
-            self._primary_targets = targets         # assume targets are
+        targets = [GalleryPage.full_target_name(t) for t in targets]
+        targets = [str(t) for t in targets]
+        self._primary_targets = targets             # assume targets are
                                                     # in primary order
 
-        systems = self.pia_table.get('Is a satellite of', [])
-        if systems and 'Sol' in systems[0]:
-            systems = self.pia_table.get('Target Name', [])
-            systems = [str(s) for s in systems]
-            systems = [s for s in systems if s in
-                        ['Earth', 'Mars', 'Jupiter', 'Saturn', 'Uranus',
-                         'Neptune', 'Pluto']]
+        systems = [GalleryPage.full_target_name(s) for s in systems]
+        systems = [str(s) for s in systems]
+        self._primary_systems = systems
 
-            if not systems:
-                systems = ['']
+        self._primary_target_types = [GalleryPage.target_type_from_target(t)
+                                      for t in targets]
 
-            if len(systems) == 1 and not targets:
-                self._primary_systems = [systems[0]]
-            self._systems = systems
+        instruments = [GalleryPage.full_instrument_name(i)
+                       for i in instruments]
+        instruments = [str(i) for i in instruments] # needed?
+        self._primary_instruments = instruments     # assume instruments are
+                                                    # in primary order
 
-        # Determine if this is a planetary press release
+        hosts = [GalleryPage.full_host_name(h) for h in hosts]
+        hosts = [str(h) for h in hosts]
+        self._primary_hosts = hosts
+
+        missions = [GalleryPage.full_mission_name(m) for m in missions]
+        missions = [str(m) for m in missions]
+        self._primary_missions = missions
+
+        # Scrape the text for more keyword values
+        _ = self.keywords
+        _ = self.targets
+        _ = self.target_types
+        _ = self.systems
+        _ = self.missions
+        _ = self.hosts
+        _ = self.instruments
+        _ = self.detectors
+
+        # Apply known corrections
+        repair_piapage(self)
+
+        # Earth and Sun images are only treated as planetary if they include a
+        # planetary target or come from a planetary mission
         target_types_filtered = set(self.target_types)
         target_types_filtered.discard('')
         target_types_filtered.discard('Sun')
         target_types_filtered.discard('Earth')
+        self.is_planetary = len(target_types_filtered) > 0
 
-        self.is_planetary = len(target_types_filtered) != 0
+        for pattern in MISSIONS_ALWAYS_INCLUDED:
+            for mission in self.missions:
+                if mission.startswith(pattern):
+                    self.is_planetary = True
+                    break
 
-        for mission in self.missions:
-            if mission in REQUIRED_MISSIONS or 'Mars' in mission:
-                self.is_planetary = True
-                break
-
-        for mission in self.missions:
-            if mission in EXCLUDED_MISSIONS:
-                self.is_planetary = False
-                break
+        if not self.might_be_planetary:
+            self.is_planetary = False
 
         # Locate remote resources and relevant info
         self.remote_version_info = {}
@@ -592,8 +546,10 @@ class PiaPage(GalleryPage):
         req = requests.get(url)
 
         # Make sure we got back a good request
-        if req.status_code != 200 or PiaPage.MISSING_PAGE_TEXT in req.text:
-            raise IOError('URL not found: "%s"' % url)
+        if (req.status_code != 200 or
+            PiaPage.MISSING_PAGE_TEXT in req.text or
+            PiaPage.BACK_TO_HOME_TEXT in req.text):
+                raise IOError('URL not found: "%s"' % url)
 
         print 'Downloaded ' + url
 
@@ -603,6 +559,10 @@ class PiaPage(GalleryPage):
         # Save the file so we don't need to retrieve it next time
         filepath = PiaPage.filepath_from_source(source)
         if recache or not os.path.exists(filepath):
+            parent = os.path.split(filepath)[0]
+            if not os.path.exists(parent):
+                os.mkdir(parent)
+
             with open(filepath, 'w') as file:
                 file.write(cleaned)
 
@@ -830,11 +790,8 @@ class PiaPage(GalleryPage):
 
         background_indices = []
 
-        # Test the last four paragraphs for background info
-        for k in range(-4,0):
-
-            # The first paragraph is never background info
-            if len(filtered_paragraphs) <= -k: continue
+        # Test the last eight paragraphs for background info
+        for k in range(1,len(filtered_paragraphs)):
 
             # Stop each paragraph search if any background substring is found
             for test_str in BACKGROUND_STRINGS:
@@ -848,11 +805,15 @@ class PiaPage(GalleryPage):
         # BeautifulSoup objects
         caption_as_soup    = BeautifulSoup('', PARSER)
         background_as_soup = BeautifulSoup('', PARSER)
-        for k in range(-len(filtered_paragraphs), 0):
+        background_found = False
+        for k in range(len(filtered_paragraphs)):
 
             if k in background_indices:
+                background_found = True
                 background_as_soup.append(filtered_paragraphs_in_soup[k])
             else:
+#                 if background_found:
+#                     print('WARNING, interleaved caption: ' + str(k) + ' ' + str(self.id))
                 caption_as_soup.append(filtered_paragraphs_in_soup[k])
 
         return (caption_as_soup, background_as_soup)
@@ -863,7 +824,7 @@ class PiaPage(GalleryPage):
         table = {}
         soup_table = {}
 
-        # The table row are best recognized by the unique bgcolor
+        # The table rows are best recognized by the unique bgcolor
         rows = self.soup.find_all('tr', attrs={'bgcolor':"#eeeeee"})
         for row in rows:
             columns = row.find_all('td')
@@ -895,8 +856,9 @@ class PiaPage(GalleryPage):
               pair.append(new_items)
 
             key = pair[0][0].replace(':','')
-            table[key] = pair[1]
-            soup_table[key] = soup_value
+            if pair[1]:
+                table[key] = pair[1]
+                soup_table[key] = soup_value
 
         self.pia_table = table
         self.pia_soup_table = soup_table
@@ -969,7 +931,8 @@ class PiaPage(GalleryPage):
 # These are saved in pickle files.
 ################################################################################
 
-def build_catalog(incremental=True, verbose=True, download=False, path=None):
+def build_catalog(incremental=True, verbose=True, download=False, path=None,
+                  page_range=None, more_verbose=False):
     """Update or replace a catalog of the PiaPage objects.
 
     Input:
@@ -1002,13 +965,19 @@ def build_catalog(incremental=True, verbose=True, download=False, path=None):
         updating = False
         piapages = {}
 
-    for pia in range(1, MAX_PIAPAGE):
+    if not page_range:
+        page_range = (1, MAX_PIAPAGE)
+
+    for pia in range(*page_range):
 
         # Skip pages already in catalog if appropriate
-        if updating and pia in piapages: continue
+        if updating and pia in piapages:
+            continue
 
         # If not updating, print every 100th number
-        if verbose and not updating:
+        if more_verbose:
+            print pia
+        elif verbose and not updating:
             if pia % 100 == 0:
                 print pia   # Otherwise, print every 100th
 

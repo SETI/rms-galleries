@@ -16,16 +16,26 @@ import julian
 from dicts import *
 
 # Compile regular expressions for KEYWORDS
+KEYWORD_USAGE = {}
 compiled = {}
 for (category, pairs) in KEYWORDS.iteritems():
-    new_pairs = []
+    KEYWORD_USAGE[category] = {}
 
+    new_pairs = []
     for (regex, values) in pairs:
+#         print(regex)
         new_pairs.append((re.compile(regex), values))
+        KEYWORD_USAGE[category][regex] = []
 
     compiled[category] = new_pairs
 
 KEYWORDS = compiled
+
+def reset_usage():
+    for category in KEYWORD_USAGE:
+        for regex in KEYWORD_USAGE[category]:
+            KEYWORD_USAGE[category][regex] = []
+
 ################################################################################
 
 class GalleryPage(object):
@@ -158,9 +168,23 @@ class GalleryPage(object):
         if hasattr(self, '_keywords'):
             return self._keywords
 
+        keywords_used = set()
+        keywords_used |= set(self.targets)
+        keywords_used |= set(self.systems)
+        keywords_used |= set(self.target_types)
+        keywords_used |= set(self.missions)
+        keywords_used |= set(self.hosts)
+        keywords_used |= set(self.host_types)
+        keywords_used |= set(self.instruments)
+        keywords_used |= set(self.detectors)
+
+        found = {k for k in self._keywords_with_suffixes if '+X' not in k}
         found = {str(k.partition('+')[0]) for k in self._keywords_with_suffixes}
+        found -= keywords_used
         found = list(found)
         found.sort()
+        self._keywords = found
+
         return found
 
     def _get_keywords_by_suffix(self, suffix):
@@ -209,7 +233,7 @@ class GalleryPage(object):
         front_attr_keywords = []
         if front_attr and hasattr(self, front_attr):
             front_attr_keywords = self.__dict__[front_attr]
-            results = list(front_attr_keywords)
+            results = list(front_attr_keywords) # copy
 
         if front_attr_keywords:
             primary = front_attr_keywords[0]
@@ -299,7 +323,11 @@ class GalleryPage(object):
         if hasattr(self, '_missions_filled'):
             return self._missions_filled
 
-        front_values = [MISSION_FROM_HOST.get(key.lower(), (key,''))[0]
+        if hasattr(self, '_primary_missions'):
+            self._primary_missions = [GalleryPage.full_mission_name(m)
+                                      for m in self._primary_missions]
+
+        front_values = [HOST_INFO.get(key.lower(), (key,'',''))[1]
                         for key in self.hosts]
         front_values = [v for v in front_values if v]   # skip empty values
 
@@ -320,7 +348,7 @@ class GalleryPage(object):
         if hasattr(self, '_host_types_filled'):
             return self._host_types_filled
 
-        front_values = [MISSION_FROM_HOST.get(key.lower(), ('',''))[1]
+        front_values = [HOST_INFO.get(key.lower(), (key,key,''))[2]
                         for key in self.hosts]
         front_values = [v for v in front_values if v]   # skip empty values
 
@@ -341,6 +369,10 @@ class GalleryPage(object):
         if hasattr(self, '_hosts_filled'):
             return self._hosts_filled
 
+        if hasattr(self, '_primary_hosts'):
+            self._primary_hosts = [GalleryPage.full_host_name(h)
+                                   for h in self._primary_hosts]
+
         # This keeps the host values in the order of the instruments
         front_values = []
         for inst in self.instruments:
@@ -356,12 +388,16 @@ class GalleryPage(object):
                     front_value = HOST_FROM_INSTRUMENT[abbrev]
 
             if isinstance(front_value, str):
-                if front_value in front_values: continue
+                if front_value in front_values:
+                    continue
+#                 print('WARNING: host "%s" inferred from instrument "%s"' %
+#                       (front_value, inst))
                 front_values.append(front_value)
 
             elif isinstance(front_value, (list, tuple)):
                 for value in front_value:
-                    if value in front_values: continue
+                    if value in front_values:
+                        continue
                     front_values.append('?' + value)
                         # "?" means use this value at this location in the list
                         # only if it can be confirmed that the host is also
@@ -383,6 +419,10 @@ class GalleryPage(object):
         # Return saved value if present
         if hasattr(self, '_instruments_filled'):
             return self._instruments_filled
+
+        if hasattr(self, '_primary_instruments'):
+            self._primary_instruments = [GalleryPage.full_instrument_name(i)
+                                         for i in self._primary_instruments]
 
         # This keeps the instrument values in the order of the detectors
         front_values = []
@@ -410,7 +450,6 @@ class GalleryPage(object):
                         # only if it can be confirmed that the host is also
                         # elsewhere in the list.
 
-
         # Save value for future requests
         self._instruments_filled = self._get_keywords_by_category('+i',
                                                         '_primary_instruments',
@@ -428,6 +467,10 @@ class GalleryPage(object):
         if hasattr(self, '_detectors_filled'):
             return self._detectors_filled
 
+        if hasattr(self, '_primary_detectors'):
+            self._primary_detectors = [GalleryPage.full_detector_name(d)
+                                       for d in self._primary_detectors]
+
         # Save value for future requests
         self._detectors_filled = self._get_keywords_by_category('+d',
                                                         '_primary_detectors',
@@ -444,6 +487,10 @@ class GalleryPage(object):
         # Return saved value if present
         if hasattr(self, '_targets_filled'):
             return self._targets_filled
+
+        if hasattr(self, '_primary_targets'):
+            self._primary_targets = [GalleryPage.full_target_name(t)
+                                     for t in self._primary_targets]
 
         # Save value for future requests
         self._targets_filled = self._get_keywords_by_category('+t',
@@ -468,9 +515,9 @@ class GalleryPage(object):
 
         # Save value for future requests
         self._target_types_filled = self._get_keywords_by_category('+T',
-                                                                '',
-                                                                front_values,
-                                                                '_target_types')
+                                                        '_primary_target_types',
+                                                        front_values,
+                                                        '_target_types')
         # Check for an asteroid or comet ID
         if self._target_types_filled == ['']:
             if self.targets[0]:
@@ -510,7 +557,8 @@ class GalleryPage(object):
                         for key in self.targets]
 
         # Save value for future requests
-        self._systems_filled = self._get_keywords_by_category('+s', '',
+        self._systems_filled = self._get_keywords_by_category('+s',
+                                                             '_primary_systems',
                                                               front_values,
                                                               '_systems')
         return self._systems_filled
@@ -585,7 +633,7 @@ class GalleryPage(object):
         # Cache the result the first time this is called
         if not hasattr(self, '_keywords_with_suffixes_found'):
             self._keywords_with_suffixes_found = \
-                                        find_keywords(self._keyword_search_text)
+                                find_keywords(self._keyword_search_text, self)
 
         return self._keywords_with_suffixes_found
 
@@ -597,7 +645,7 @@ class GalleryPage(object):
         # Cache the result the first time this is called
         if not hasattr(self, '_keywords_with_suffixes_from_background_found'):
             self._keywords_with_suffixes_from_background_found = \
-                                        find_keywords(self.background_text)
+                                find_keywords(self.background_text, self)
 
         return self._keywords_with_suffixes_from_background_found
 
@@ -611,7 +659,7 @@ class GalleryPage(object):
             title = self.title.replace('Moon', 'moon') 
                 # Avoid being fooled by capitalization of title!
             self._keywords_with_suffixes_from_title_found = \
-                                        find_keywords(title)
+                                find_keywords(title, self)
 
         return self._keywords_with_suffixes_from_title_found
 
@@ -674,6 +722,10 @@ class GalleryPage(object):
         if key in HOST_FULL_NAMES:
             return HOST_FULL_NAMES[key]
 
+        key = name.lower()
+        if key in HOST_INFO:
+            return HOST_INFO[key][0]
+
         return name
 
     @staticmethod
@@ -690,9 +742,205 @@ class GalleryPage(object):
 
         key = name.lower()
         if key in TARGET_FULL_NAMES:
-            return TARGET_FULL_NAMES[key]
+            return TARGET_FULL_NAMES[key][0]
+
+        parts = name.split()        # remove digits in front and try again
+        if len(parts) > 1:
+            try:
+                test = int(parts[0])
+            except ValueError:
+                pass
+            else:
+                key = ' '.join(parts[1:])
+                if key in TARGET_FULL_NAMES:
+                    return TARGET_FULL_NAMES[key][0]
 
         return name
+
+    ############################################################################
+    # Tools to associated keyword values
+    ############################################################################
+
+    @staticmethod
+    def _select_by_suffix(keywords, suffix):
+
+        assert suffix[0] == '+' and len(suffix) == 2
+
+        # sometimes a plus is just a plus!
+        selected = set()
+        for keyword in keywords:
+            parts = keyword.split('+')
+            if not suffix[1:] in parts:
+                continue
+
+            for k in range(len(parts)-1, -1, -1):
+                if len(parts[k]) != 1:
+                    break
+
+            keyword = ''.join(parts[:k+1])
+            selected.add(keyword)
+
+        return selected
+
+    @staticmethod
+    def hosts_from_mission(mission):
+
+        hosts = {h[0] for h in HOST_INFO.values() if h[1] == mission}
+
+        mission = GalleryPage.full_mission_name(mission)
+        hosts |= {h[0] for h in HOST_INFO.values() if h[1] == mission}
+
+        for category in KEYWORDS:
+            keywords = _find_keywords1(category, ' ' + mission + ' ')
+            hosts |= GalleryPage._select_by_suffix(keywords, '+h')
+
+        return hosts
+
+    @staticmethod
+    def host_from_mission(mission):
+
+        hosts = GalleryPage.hosts_from_mission(mission)
+        if len(hosts) == 1:
+            return hosts.pop()
+
+        return ''
+
+    @staticmethod
+    def missions_from_host(host):
+
+        missions = {h[1] for h in HOST_INFO.values() if h[0] == host}
+
+        host = GalleryPage.full_host_name(host)
+        missions |= {h[1] for h in HOST_INFO.values() if h[0] == host}
+
+        for category in KEYWORDS:
+            keywords = _find_keywords1(category, ' ' + host + ' ')
+            missions |= GalleryPage._select_by_suffix(keywords, '+m')
+
+        return missions
+
+    @staticmethod
+    def mission_from_host(host):
+
+        missions = GalleryPage.missions_from_host(host)
+        if len(missions) == 1:
+           missions.pop()
+
+        return ''
+
+    @staticmethod
+    def host_types_from_host(host):
+
+        host_types = {h[2] for h in HOST_INFO.values() if h[0] == host}
+
+        host = GalleryPage.full_host_name(host)
+        host_types |= {h[2] for h in HOST_INFO.values() if h[0] == host}
+
+        keywords = set()
+        for category in KEYWORDS:
+            keywords |= _find_keywords1(category, ' ' + host + ' ')
+            host_types |= GalleryPage._select_by_suffix(keywords, '+H')
+
+        return host_types
+
+    @staticmethod
+    def host_type_from_host(host):
+
+        host_types = GalleryPage.host_types_from_host(host)
+        if len(host_types) == 1:
+            return host_types.pop()
+
+        return ''
+
+    @staticmethod
+    def hosts_from_instrument(instrument):
+
+        instrument = GalleryPage.full_instrument_name(instrument)
+        keywords = _find_keywords1('General', ' ' + instrument + ' ')
+        hosts = GalleryPage._select_by_suffix(keywords, '+h')
+        if hosts:
+            return hosts
+
+        for category in KEYWORDS:
+            keywords = _find_keywords1(category, ' ' + instrument + ' ')
+            hosts |= GalleryPage._select_by_suffix(keywords, '+h')
+
+        return hosts
+
+    @staticmethod
+    def host_from_instrument(instrument):
+
+        hosts = GalleryPage.hosts_from_instrument(instrument)
+        if len(hosts) == 1:
+            return hosts.pop()
+
+        return ''
+
+    @staticmethod
+    def target_types_from_target(target):
+
+        target = GalleryPage.full_target_name(target)
+        pairs = {t[1:] for t in TARGET_FULL_NAMES.values() if t[0] == target}
+
+        target_types = {p[0] for p in pairs}
+        systems = {p[1] for p in pairs}
+
+        categories = {'General'} | target_types | systems
+        for category in categories:
+            keywords = _find_keywords1(category, ' ' + target + ' ')
+            target_types |= GalleryPage._select_by_suffix(keywords, '+T')
+
+        if target_types:
+            return target_types
+
+        for category in KEYWORDS:
+            if category not in categories:
+                keywords = _find_keywords1(category, ' ' + target + ' ')
+                target_types |= GalleryPage._select_by_suffix(keywords, '+T')
+
+        return target_types
+
+    @staticmethod
+    def target_type_from_target(target):
+
+        target_types = GalleryPage.target_types_from_target(target)
+        if len(target_types) == 1:
+            return target_types.pop()
+
+        return ''
+
+    @staticmethod
+    def systems_from_target(target):
+
+        target = GalleryPage.full_target_name(target)
+        pairs = {t[1:] for t in TARGET_FULL_NAMES.values() if t[0] == target}
+
+        target_types = {p[0] for p in pairs}
+        systems = {p[1] for p in pairs if p[1]} # there might not be a system
+
+        categories = {'General'} | target_types | systems
+        for category in categories:
+            keywords = _find_keywords1(category, ' ' + target + ' ')
+            systems |= GalleryPage._select_by_suffix(keywords, '+s')
+
+        if systems:
+            return systems
+
+        for category in KEYWORDS:
+            if category not in categories:
+                keywords = _find_keywords1(category, ' ' + target + ' ')
+                systems |= GalleryPage._select_by_suffix(keywords, '+s')
+
+        return systems
+
+    @staticmethod
+    def system_from_target(target):
+
+        systems = GalleryPage.systems_from_target(target)
+        if len(systems) == 1:
+            return systems.pop()
+
+        return ''
 
     ############################################################################
     # Jekyll output
@@ -854,25 +1102,15 @@ class GalleryPage(object):
                 date = ''
                 other_dates = []
 
-            keywords_used = set()
-            keywords_used |= set(self.targets)
-            keywords_used |= set(self.systems)
-            keywords_used |= set(self.target_types)
-            keywords_used |= set(self.missions)
-            keywords_used |= set(self.hosts)
-            keywords_used |= set(self.host_types)
-            keywords_used |= set(self.instruments)
-            keywords_used |= set(self.detectors)
-            keywords = set(self.keywords) - keywords_used
+            keywords = self.keywords
 
             if self.is_movie:
-                keywords.add('Movie')
+                keywords.append('Movie')
             if self.is_color:
-                keywords.add('Color')
+                keywords.append('Color')
             if self.is_grayscale:
-                keywords.add('Grayscale')
+                keywords.append('Grayscale')
 
-            keywords = list(keywords)
             keywords.sort()
 
             if '//' in self.origin_url:
@@ -923,6 +1161,7 @@ class GalleryPage(object):
    
             f.write('</table>\n')
             f.write('<br>\n')
+
 
 ################################################################################
 # Date identification support
@@ -996,40 +1235,11 @@ def find_dates(text):
 # Keyword identification support
 ################################################################################
 
-def find_keywords(text):
-    """Return an alphabetical list of all the keywords found in the given
-    text."""
-
-    # Returns all the keywords found in the text, based on the key to a
-    # sub-dictionary of the KEYWORDS dictionary
-    def find_keywords1(key):
-        found = set()
-
-        # Try each regex
-        # For this purpose, partition off any suffix starting with "+"
-        for (regex, values) in KEYWORDS[key.partition('+')[0]]:
-            matches = regex.findall(text)
-            if not matches: continue
-
-            # Add the new keywords without substitution to the set
-            nosubs = [v for v in values if '$' not in v]
-            found |= set(nosubs)
-
-            # For each value that requires a substitution...
-            for v in values:
-                if '$' not in v: continue
-
-                # ...and for each match...
-                for match in matches:
-
-                    # ... perform the substitution and add it to the set
-                    found.add(v.replace('$', str(match)))
-
-        # Return the complete set
-        return found
+def find_keywords(text, page=None):
+    """Return the set of all the keywords found in the given text."""
 
     # Start with the "General" list of keyword patterns
-    keywords_found = find_keywords1('General')
+    keywords_found = _find_keywords1('General', text, page)
 
     # Augment the set of keywords by iteration until done
     keywords_followed = set()
@@ -1045,17 +1255,20 @@ def find_keywords(text):
         for groupname in keywords_found:
 
             # If we have already checked it, don't try again
-            if groupname in keywords_followed: continue
+            if groupname in keywords_followed:
+                continue
             keywords_followed.add(groupname)
 
             # If it does not define a subgroup, skip it
             key = groupname.partition('+')[0]
-            if key in keywords_followed: continue
-            if key not in KEYWORDS: continue
+            if key in keywords_followed:
+                continue
+            if key not in KEYWORDS:
+                continue
             keywords_followed.add(key)
 
             # Augment the list of additional keywords
-            found_in_subgroups |= find_keywords1(groupname)
+            found_in_subgroups |= _find_keywords1(groupname, text, page)
 
         # Merge the two keyword lists
         keywords_found |= found_in_subgroups
@@ -1063,5 +1276,53 @@ def find_keywords(text):
         # If the list has not expanded on this iteration, we're done
         if len(keywords_found) == nfound:
             return keywords_found
+
+# Returns the set of keywords found in the text, based on the key to a
+# sub-dictionary of the KEYWORDS dictionary
+def _find_keywords1(key, text, page=None):
+    found = set()
+
+    # Try each regex
+    # For this purpose, partition off any suffix starting with "+"
+    key = key.partition('+')[0]
+    if key not in KEYWORDS:
+        return set()
+
+    for (regex, values) in KEYWORDS[key]:
+        matches = regex.findall(text)
+        if not matches:
+            continue
+
+        if page:
+            if not hasattr(page, '_rules_applied'):
+                page._rules_applied = []
+
+            page._rules_applied.append((regex,values))
+
+        # Add the new keywords without substitution to the set
+        nosubs = [v for v in values if '\\' not in v]
+        found |= set(nosubs)
+
+        # For each value that requires a substitution...
+        for v in values:
+            if '\\' not in v:
+                continue
+
+            # ...and for each match...
+            for match in matches:
+                if isinstance(match, str):
+                    match = [match]
+
+                for k in range(len(match)):
+                    try:
+                        v = v.replace('\\' + str(k+1), match[k])
+                    except IndexError:
+                        break
+
+                # ... perform the substitution and add it to the set
+                found.add(v)
+
+    # Return the complete set
+    return found
 
 ################################################################################

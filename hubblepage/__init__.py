@@ -1,26 +1,38 @@
-#!/usr/bin/env python
 ################################################################################
-# Class PiaPage
+# piapage/__init__.py
+################################################################################
+# Class HubblePage
 #
-# A class that customizes the GalleryPage interface for NASA press release web
-# pages from the Planetary Photojournal, https://photojournal.jpl.nasa.gov.
+# A class that customizes the GalleryPage interface for press releases at
+# hubblesite.org.
 #
 # Andrew Lin & Mark Showalter
 ################################################################################
 
+### Right now, everything below is just a copy of piapage/__init__.py
+
 from gallerypage import GalleryPage
+import storedpage
 
 from bs4 import BeautifulSoup, ResultSet
 import requests
 import os
+import warnings
 import json
 import lxml
 import re
+import pickle
+import pycurl
+from StringIO import StringIO
+from PIL import Image
 
-from piapage_background_strings import BACKGROUND_STRINGS
-from piapage_gifs import PIAPAGE_MEDIUM_GIFS, PIAPAGE_SMALL_GIFS, \
-                         PIAPAGE_THUMBNAIL_GIFS
-from piapage_color_string import PIAPAGE_COLOR_STRING
+from .BACKGROUND_STRINGS import BACKGROUND_STRINGS
+from .GIF_PIAPAGES       import MEDIUM_GIF_PIAPAGES, \
+                                SMALL_GIF_PIAPAGES, \
+                                THUMBNAIL_GIF_PIAPAGES
+from .COLOR_VS_PIAPAGE   import COLOR_VS_PIAPAGE
+
+from piapage.MAX_PIAPAGE import MAX_PIAPAGE
 
 PARSER = 'lxml'
 
@@ -55,17 +67,24 @@ EXCLUDED_MISSIONS = set([
 ])
 
 class PiaPage(GalleryPage):
+    """PiaPage is a subclass of GalleryPage. It implements the complete
+    GalleryPage API for the specific case of a page on the PDS Photojournal
+    website, https://photojournal.jpl.nasa.gov."""
 
     # Class constants
-    ROOT_URL = "https://photojournal.jpl.nasa.gov"
-    PIA_URL = "https://photojournal.jpl.nasa.gov/catalog/"
-    MISSING_PAGE_TEXT = 'No images in our database met your search criteria'
-    PIAROOT_ENVNAME = 'PIAPATH'
-    _PIAROOT = None
+    PHOTOJOURNAL_DOMAIN = "photojournal.jpl.nasa.gov"
+    PHOTOJOURNAL_URL = "https://" + PHOTOJOURNAL_DOMAIN
 
-    def __init__(self, src, overwrite=False):
-        """ The constructor of this class. Requires a source. Contains
-        attributes source, html, soup, title, credit, and caption.
+    MISSING_PAGE_TEXT = 'No images in our database met your search criteria'
+
+    root = os.environ['PIAPATH']
+    CACHE_ROOT_ = root.rstrip('/') + '/'        # where to store cached HTML
+    CATALOG = CACHE_ROOT_ + 'PIAPAGE_CATALOG.pickle'
+
+    def __init__(self, src, recache=False, download=False, images=False,
+                            jekyll=False, replace=False, validate=False,
+                            _dict=None):
+        """Constructor for a PiaPage object.
 
         Input:
             src         The PIA source. This can be
@@ -76,20 +95,67 @@ class PiaPage(GalleryPage):
                         4. The URL of a PIA page. In this case, the HTML is
                            saved as a local file for future, quick access.
 
-            overwrite   True to overwrite a local copy of the HTML source with
-                        one pulled from the website; False to leave any local
-                        copy unchanged
+            recache     True to overwrite a local cached copy of the HTML source
+                        with one pulled from the website; False to leave any
+                        local copy unchanged.
+
+            download    True to download the page if it exists remotely but we
+                        do not have a locally cached copy.
+
+            images      'all' to download all images associated with downloaded
+                        pages; 'planetary' to download images only if they are
+                        planetary; None or False to skip the downloading of
+                        images. A warning is raised if one or more of the images
+                        cannot be downloaded.
+
+            jekyll      'all' to create a Jekyll source file for every page;
+                        'planetary' to create one for planetary images only;
+                        'new-all' to create a Jekyll page only if it does not
+                        already exist; 'new-planetary' to create a Jekyll page
+                        for any planetary page that does not already exist.
+                        None or False to prevent the creation of a Jekyll page.
+
+            validate    'all' to validate the existence of associated images
+                        for all pages; 'planetary' to validate associated images
+                        if they are planetary; None or False to skip validation.
+
+            _dict       if not None, this is a dictionary used to fill in all
+                        the object's attributes. Other input parameters are
+                        ignored. Used to make copies of PiaPage objects or to
+                        convert from StoredPages.
         """
 
+        # Make a copy if necessary
+        if _dict:
+            for (key, value) in _dict.iteritems():
+                self.__dict__[key] = value
+
+            return
+
+        # Otherwise use the standard constructor
+
+        # Check the input arguments
+        if images:
+            if images not in ('all', 'planetary'):
+                raise ValueError('Invalid images arg: ' + str(images))
+
+        if validate:
+            if validate not in ('all', 'planetary'):
+                raise ValueError('Invalid validate arg: ' + str(validate))
+
+        if jekyll:
+            if jekyll not in ('all', 'planetary', 'new-all', 'new-planetary'):
+                raise ValueError('Invalid jekyll arg: ' + str(jekyll))
+
+        # Otherwise use the standard constructor
         self.source = src
 
         self.id = PiaPage.get_id(self.source)
                             # Unique identifier for this product, e.g., PIA12345
         self.origin_url = PiaPage.url_from_source(self.source)
-#         self.local_url  = PiaPage.local_url(self.id)
 
         # Read the page as HTML
-        self.html = PiaPage.get_html_for_id(self.source, overwrite)
+        self.html = PiaPage.get_html_for_id(self.source, recache, download)
 
 #       The default parser cannot handle some PIA pages. lxml does.
 #       self.soup = BeautifulSoup(self.html, 'html.parser')
@@ -123,6 +189,7 @@ class PiaPage(GalleryPage):
         self.title = self.get_title()
         self.credit = self.get_credit()
         self.release_date = self.get_release_date()
+        self.acquisition_date = ''      # Not generally available for PIA pages
         self.xrefs = self.find_xrefs()
 
         self.is_movie = self.get_is_movie()
@@ -265,9 +332,9 @@ class PiaPage(GalleryPage):
             parts = w_x_h.split(' x ')
             width  = int(parts[0])
             height = int(parts[1])
-            shape = (width, height)
+            self.shape = (width, height)
         else:
-            shape = ()
+            self.shape = None
 
         # Find the images and sizes in bytes
         for (key,value) in self.pia_soup_table.items():
@@ -290,122 +357,201 @@ class PiaPage(GalleryPage):
                         size *= 1.e6
                     elif units == 'kB':
                         size *= 1000.
+                except KeyboardInterrupt:
+                    sys.exit(1)
                 except Exception:
                     pass            # If anything goes wrong, size = 0
 
             size = int(size + 0.5)  # round to int
-            self.remote_version_info[key] = (PiaPage.ROOT_URL + href,
-                                             shape, size)
+            self.remote_version_info[key] = (PiaPage.PHOTOJOURNAL_URL + href,
+                                             self.shape, size)
 
         for img in self.soup.find_all('img'):
             if 'browse' in img.attrs['src']:
                 self.remote_version_info['Browse Image'] = (
-                                PiaPage.ROOT_URL + str(img.attrs['src']), (), 0)
+                        PiaPage.PHOTOJOURNAL_URL + str(img.attrs['src']), (), 0)
                 break
 
         for a in self.soup.find_all('a'):
             if 'jpegMod' in a.attrs['href']:
                 self.remote_version_info['Medium Image'] = (
-                                PiaPage.ROOT_URL + str(a.attrs['href']), (), 0)
+                        PiaPage.PHOTOJOURNAL_URL + str(a.attrs['href']), (), 0)
                 break
 
         # If it's a movie
         if self.is_movie:
             self.remote_version_info['Movie Download Options'] = \
-                            (PiaPage.ROOT_URL + '/animation/' + self.id, (), 0)
+                    (PiaPage.PHOTOJOURNAL_URL + '/animation/' + self.id, (), 0)
 
-        self.local_html_url      = PiaPage.local_html_url_for_id(self.id)
+        self.local_page_url      = PiaPage.local_page_url_for_id(self.id)
         self.local_thumbnail_url = PiaPage.local_thumbnail_url_for_id(self.id)
         self.local_small_url     = PiaPage.local_small_url_for_id(self.id)
-        self.local_medium_url    = PiaPage.local_medium_url_for_id(self.id,
-                                                                  self.is_movie)
+        self.local_medium_url    = PiaPage.local_medium_url_for_id(self.id)
+
+        # Download images or validate if necessary
+        TEST = [('all', True), ('all', False), ('planetary', True)]
+        if (images, self.is_planetary) in TEST:
+            PiaPage.download_images_for_id(self.id, replace=False,
+                                                    verbose=True, warn=True)
+
+        elif (validate, self.is_planetary) in TEST:
+            path = PiaPage.thumbnail_filepath_for_id(self.id)
+            if not os.path.exists(path):
+                raise IOError('Missing thumbnail for %s: %s' % (self.id, path))
+
+            path = PiaPage.small_filepath_for_id(self.id)
+            if not os.path.exists(path):
+                raise IOError('Missing small image for %s: %s' % (self.id,
+                                                                  path))
+
+            path = PiaPage.medium_filepath_for_id(self.id)
+            if not os.path.exists(path):
+                raise IOError('Missing medium image for %s: %s' % (self.id,
+                                                                   path))
+
+        # Create the Jekyll file if necessary
+        if jekyll:
+            new_only = jekyll.startswith('new')
+            if new_only:
+                jekyll = jekyll[4:]
+
+            if (jekyll, self.is_planetary) in TEST:
+                self.write_jekyll(replace=(not new_only), verbose=new_only)
+
+        # Fill in the thumbnail shape if possible
+        path = PiaPage.thumbnail_filepath_for_id(self.id)
+        if os.path.exists(path):
+            im = Image.open(path)
+            self.thumbnail_shape = im.size
+            im.close()
+        else:
+            self.thumbnail_shape = None
 
     ############################################################################
-    # Procedures to locate URLs
+    # Procedures to locate URLs and files
     ############################################################################
 
     @staticmethod
-    def local_html_url_for_id(id):
+    def remote_page_url_for_id(id):
 
-        return GalleryPage.LOCAL_ROOT_ + 'pages/%sxxx/%s.html' % (id[:5], id)
+        id = PiaPage.get_id(id)
+        return PiaPage.PHOTOJOURNAL_URL + '/catalog/' + id
+
+    @staticmethod
+    def remote_thumbnail_url_for_id(id):
+
+        id = PiaPage.get_id(id)
+
+        ipia = int(id[3:])
+        if ipia in THUMBNAIL_GIF_PIAPAGES:
+            return PiaPage.PHOTOJOURNAL_URL + '/thumb/' + id + '.gif'
+        else:
+            return PiaPage.PHOTOJOURNAL_URL + '/thumb/' + id + '.jpg'
+
+    @staticmethod
+    def remote_small_url_for_id(id):
+
+        id = PiaPage.get_id(id)
+
+        ipia = int(id[3:])
+        if ipia in SMALL_GIF_PIAPAGES:
+            return PiaPage.PHOTOJOURNAL_URL + '/browse/' + id + '.gif'
+        else:
+            return PiaPage.PHOTOJOURNAL_URL + '/jpeg/' + id + '.jpg'
+
+    @staticmethod
+    def remote_medium_url_for_id(id, is_movie):
+
+        id = PiaPage.get_id(id)
+
+        ipia = int(id[3:])
+        if ipia in MEDIUM_GIF_PIAPAGES:
+            suffix = 'gif'
+        elif is_movie:
+            return PiaPage.PHOTOJOURNAL_URL + '/animation/' + id + '.gif'
+        else:
+            suffix = 'jpg'
+
+        return PiaPage.PHOTOJOURNAL_URL + '/jpegMod/' + id + '_modest.jpg'
+
+    @staticmethod
+    def local_page_url_for_id(id):
+
+        id = PiaPage.get_id(id)
+        return '/' + GalleryPage.PRESS_RELEASES_SUBDIR_ + \
+                        'pages/%sxxx/%s.html' % (id[:5], id)
 
     @staticmethod
     def local_thumbnail_url_for_id(id):
 
+        id = PiaPage.get_id(id)
+
         ipia = int(id[3:])
-        if ipia in PIAPAGE_THUMBNAIL_GIFS:
+        if ipia in THUMBNAIL_GIF_PIAPAGES:
             suffix = 'gif'
         else:
             suffix = 'jpg'
 
-        return GalleryPage.LOCAL_ROOT_ + \
+        return '/' + GalleryPage.PRESS_RELEASES_SUBDIR_ + \
                         'thumbnails/%sxxx/%s_thumb.%s' % (id[:5], id, suffix)
 
     @staticmethod
     def local_small_url_for_id(id):
 
+        id = PiaPage.get_id(id)
+
         ipia = int(id[3:])
-        if ipia in PIAPAGE_SMALL_GIFS:
+        if ipia in SMALL_GIF_PIAPAGES:
             suffix = 'gif'
         else:
             suffix = 'jpg'
 
-        return GalleryPage.LOCAL_ROOT_ + \
+        return '/' + GalleryPage.PRESS_RELEASES_SUBDIR_ + \
                         'small/%sxxx/%s_small.%s' % (id[:5], id, suffix)
 
     @staticmethod
-    def local_medium_url_for_id(id, is_movie):
+    def local_medium_url_for_id(id):
 
+        id = PiaPage.get_id(id)
         ipia = int(id[3:])
-        if ipia in PIAPAGE_MEDIUM_GIFS:
+
+        if ipia in MEDIUM_GIF_PIAPAGES:
             suffix = 'gif'
-        elif is_movie:
-            return PiaPage.ROOT_URL + '/animation/' + id
         else:
             suffix = 'jpg'
 
-        return GalleryPage.LOCAL_ROOT_ + \
+        return '/' + GalleryPage.PRESS_RELEASES_SUBDIR_ + \
                         'medium/%sxxx/%s_med.%s' % (id[:5], id, suffix)
 
-    ############################################################################
-    # piaroot() returns the path to the root directory for PIA text files. It
-    # is filled in internally the first time it is used.
-    # 
-    # The path to the local copy of a particular PIA text file is
-    #   piaroot/PIAnnxxx/PIAnnnnn.txt
-    # where 'nnnnn' is replaced by the pia number. The directory name uses the
-    # first two digits of the pia number followed by literal 'xxx'. This
-    # prevents directories from growing to more than 1000 files.
-    ############################################################################
+    @staticmethod
+    def page_filepath_for_id(id):
+
+        return GalleryPage.DOCUMENTS_FILE_ROOT_[:-1] + \
+               PiaPage.local_page_url_for_id(id)
 
     @staticmethod
-    def piaroot():
-        """Return the root directory for PIA text files. Search via an
-        environment variable if it is undefined."""
+    def thumbnail_filepath_for_id(id):
 
-        if not PiaPage._PIAROOT:
-            try:
-                PiaPage._PIAROOT = os.environ[PiaPage.PIAROOT_ENVNAME]
-            except KeyError:
-                ## Failing that, we will use the current working directory
-                PiaPage._PIAROOT = ''
-
-        return PiaPage._PIAROOT
+        return GalleryPage.DOCUMENTS_FILE_ROOT_[:-1] + \
+               PiaPage.local_thumbnail_url_for_id(id)
 
     @staticmethod
-    def set_piaroot(root):
-        """Set the root directory for PIA text files. Generally, this should
-        be called before a constructor. It is unnecessary if the environment
-        variable PIAPATH is defined.
+    def small_filepath_for_id(id):
 
-        The path to the local copy of a particular PIA text file is
-            piaroot/PIAnnxxx/PIAnnnnn.txt
-        where 'nnnnn' is replaced by the pia number. The directory name uses
-        the first two digits of the pia number followed by literal 'xxx'. This
-        prevents directories from growing to more than 1000 files.
-        """
+        return GalleryPage.DOCUMENTS_FILE_ROOT_[:-1] + \
+               PiaPage.local_small_url_for_id(id)
 
-        PiaPage._PIAROOT = root
+    @staticmethod
+    def medium_filepath_for_id(id):
+
+        return GalleryPage.DOCUMENTS_FILE_ROOT_[:-1] + \
+               PiaPage.local_medium_url_for_id(id)
+
+    @staticmethod
+    def cache_filepath_for_id(id):
+
+        id = PiaPage.get_id(id)
+        return PiaPage.CACHE_ROOT_ + '%sxxx/%s.txt' % (id[:5], id)
 
     ############################################################################
     # Main routine to retrieve HTML from either a local or remote site, and to
@@ -413,7 +559,7 @@ class PiaPage(GalleryPage):
     ############################################################################
 
     @staticmethod
-    def get_html_for_id(source, overwrite=False):
+    def get_html_for_id(source, recache=False, download=True):
         """Obtain the html from a PIA number or string"""
 
         # Convert the PIA code from a string if necessary
@@ -421,7 +567,7 @@ class PiaPage(GalleryPage):
             source = PiaPage.get_id(source)
 
         # If this is not a URL, read a local file if possible
-        if not PiaPage.is_url(source) and not overwrite:
+        if not PiaPage.is_url(source) and not recache:
             if os.path.exists(source):
                 filepath = source
             else:
@@ -430,13 +576,16 @@ class PiaPage(GalleryPage):
             try:
                 with open(filepath, 'r') as file:
                     html = file.read()
-                return str(html)
+                return str(html.encode('ascii', 'xmlcharrefreplace'))
 
             # If local file not found
             except IOError:
                 pass
 
         # Otherwise, get the online version
+        if not download:
+            raise IOError('Local copy of page "%s" not found' % source)
+
         if PiaPage.is_url(source):
             url = source
         else:
@@ -448,16 +597,122 @@ class PiaPage(GalleryPage):
         if req.status_code != 200 or PiaPage.MISSING_PAGE_TEXT in req.text:
             raise IOError('URL not found: "%s"' % url)
 
-        # Replace non-ASCII characters that normally breaks HTML
+        print 'Downloaded ' + url
+
+        # Replace non-ASCII characters that normally break HTML
         cleaned = ''.join(c if ord(c) < 128 else ' ' for c in req.text)
 
         # Save the file so we don't need to retrieve it next time
         filepath = PiaPage.filepath_from_source(source)
-        if overwrite or not os.path.exists(filepath):
+        if recache or not os.path.exists(filepath):
             with open(filepath, 'w') as file:
                 file.write(cleaned)
 
         return cleaned
+
+    @staticmethod
+    def download_images_for_id(id, is_movie=False, replace=False,
+                                                   verbose=False, warn=True):
+        """Download local copies of the thumbnail, small and medium images."""
+
+        path = PiaPage.thumbnail_filepath_for_id(id)
+        if replace or not os.path.exists(path):
+            url = PiaPage.remote_thumbnail_url_for_id(id)
+
+            try:
+                buffer = StringIO()
+                c = pycurl.Curl()
+                c.setopt(c.URL, url)
+                c.setopt(c.WRITEDATA, buffer)
+                c.perform()
+                c.close()
+
+                parent = os.path.split(path)[0]
+                try:
+                    os.makedirs(parent)
+                except OSError:
+                    pass
+
+                with open(path, 'w') as f:
+                    f.write(buffer.getvalue())
+
+            except KeyboardInterrupt:
+                sys.exit(1)
+
+            except Exception:
+                if warn:
+                    warnings.warn('Unable to download thumbnail for ' + id)
+                else:
+                    raise
+
+            if verbose:
+                print 'Thumbnail downloaded for ' + id
+
+        path = PiaPage.small_filepath_for_id(id)
+        if replace or not os.path.exists(path):
+            url = PiaPage.remote_small_url_for_id(id)
+
+            try:
+                buffer = StringIO()
+                c = pycurl.Curl()
+                c.setopt(c.URL, url)
+                c.setopt(c.WRITEDATA, buffer)
+                c.perform()
+                c.close()
+
+                parent = os.path.split(path)[0]
+                try:
+                    os.makedirs(parent)
+                except OSError:
+                    pass
+
+                with open(path, 'w') as f:
+                    f.write(buffer.getvalue())
+
+            except KeyboardInterrupt:
+                sys.exit(1)
+
+            except Exception:
+                if warn:
+                    warnings.warn('Unable to download small image for ' + id)
+                else:
+                    raise
+
+            if verbose:
+                print 'Small image downloaded for ' + id
+
+        path = PiaPage.medium_filepath_for_id(id)
+        if replace or not os.path.exists(path):
+            url = PiaPage.remote_medium_url_for_id(id, is_movie)
+
+            try:
+                buffer = StringIO()
+                c = pycurl.Curl()
+                c.setopt(c.URL, url)
+                c.setopt(c.WRITEDATA, buffer)
+                c.perform()
+                c.close()
+
+                parent = os.path.split(path)[0]
+                try:
+                    os.makedirs(parent)
+                except OSError:
+                    pass
+
+                with open(path, 'w') as f:
+                    f.write(buffer.getvalue())
+
+            except KeyboardInterrupt:
+                sys.exit(1)
+
+            except Exception:
+                if warn:
+                    warnings.warn('Unable to download medium image for ' + id)
+                else:
+                    raise
+
+            if verbose:
+                print 'Medium image downloaded for ' + id
 
     ############################################################################
     # Utilities
@@ -488,16 +743,14 @@ class PiaPage(GalleryPage):
         """Return the local file path based on the source."""
 
         id = PiaPage.get_id(source)
-        filepath = '%sxxx/%s.txt' % (id[:5], id)
-
-        return os.path.join(PiaPage.piaroot(), filepath)
+        return PiaPage.cache_filepath_for_id(id)
 
     @staticmethod
     def url_from_source(source):
         """Return the URL based on the source."""
 
         id = PiaPage.get_id(source)
-        return PiaPage.PIA_URL + id
+        return PiaPage.remote_page_url_for_id(id)
 
     ############################################################################
     # Methods to extract info from the soup
@@ -528,6 +781,9 @@ class PiaPage(GalleryPage):
 
         return date
 
+    def get_acquisition_date(self):
+        return ''
+
     def get_is_movie(self):
         """Return True if this is a movie; False if it is a still."""
 
@@ -542,8 +798,8 @@ class PiaPage(GalleryPage):
 
         ipia = int(self.id[3:])
         try:
-            return PIAPAGE_COLOR_STRING[ipia] == '3'
-        except:
+            return COLOR_VS_PIAPAGE[ipia] == '3'
+        except IndexError:
             return False
 
     def get_is_grayscale(self):
@@ -552,8 +808,8 @@ class PiaPage(GalleryPage):
 
         ipia = int(self.id[3:])
         try:
-            return PIAPAGE_COLOR_STRING[ipia] == '1'
-        except:
+            return COLOR_VS_PIAPAGE[ipia] == '1'
+        except IndexError:
             return False
 
     def get_caption_and_background(self):
@@ -577,7 +833,7 @@ class PiaPage(GalleryPage):
         background_indices = []
 
         # Test the last four paragraphs for background info
-        for k in range(-3,0):
+        for k in range(-4,0):
 
             # The first paragraph is never background info
             if len(filtered_paragraphs) <= -k: continue
@@ -619,8 +875,8 @@ class PiaPage(GalleryPage):
             for column in columns:
 
               # Clean up Unicode
-              text = str(''.join([c if ord(c) < 128 else ' '
-                         for c in column.text]))
+              text = column.text
+              text = str(''.join([c if ord(c) < 128 else ' ' for c in text]))
               text = text.strip()
 
               text = text.replace('\r', '\n')
@@ -658,105 +914,153 @@ class PiaPage(GalleryPage):
         xrefs.sort()
         return xrefs
 
-    pattern = '"https{0,1}://photojournal.jpl.nasa.gov/catalog/(PIA..)(...)"'
-    BEFORE = re.compile(pattern)
-    AFTER  = r'"%spages/\1xxx/\1\2.html"' % GalleryPage.LOCAL_ROOT_
-
-    def write_jekyll(self, filepath):
-        """Uses super() but fills in the default arguments."""
-
-        remote_keys = ['Movie Download Options',
-                      'Full-Res JPEG', 'Full-Res TIFF']
-        self._write_jekyll(filepath, remote_keys,
-                                     [(PiaPage.BEFORE, PiaPage.AFTER)])
-
 ################################################################################
-# Unit tests
+# Jekyll routines
 ################################################################################
 
-import unittest
+    @staticmethod
+    def jekyll_filepath_for_id(id):
 
-# class Test_PiaPage(unittest.TestCase):
-# 
-#     def runTest(self):
-# 
-#         # Tests of get_id
-#         self.assertEqual(PiaPage.get_id(1), 'PIA00001')
-#         self.assertEqual(PiaPage.get_id(12345), 'PIA12345')
-#         self.assertEqual(PiaPage.get_id('PIA12345'), 'PIA12345')
-#         self.assertEqual(PiaPage.get_id('PIA12xxx/PIA12345.txt'),
-#                                              'PIA12345')
-#         self.assertEqual(PiaPage.get_id(PiaPage.PIA_URL +
-#                                              'PIA12345'), 'PIA12345')
-# 
-#         # Tests of filepath_from_source (regardless of piaroot)
-#         self.assertTrue(PiaPage.filepath_from_source(1).endswith(
-#                                 'PIA00xxx/PIA00001.txt'))
-#         self.assertTrue(PiaPage.filepath_from_source(12345).endswith(
-#                                 'PIA12xxx/PIA12345.txt'))
-#         self.assertTrue(PiaPage.filepath_from_source('PIA12345').endswith(
-#                                 'PIA12xxx/PIA12345.txt'))
-#         self.assertTrue(PiaPage.filepath_from_source('PIA12xxx/PIA12345.whatever').endswith(
-#                                 'PIA12xxx/PIA12345.txt'))
-#         self.assertTrue(PiaPage.filepath_from_source(PiaPage.PIA_URL +
-#                                 'PIA12345').endswith(
-#                                 'PIA12xxx/PIA12345.txt'))
-# 
-#         # Tests of filepath_from_source (with specified piaroot)
-#         self.assertEqual(PiaPage.filepath_from_source(1, '/root'),
-#                                 '/root/PIA00xxx/PIA00001.txt')
-#         self.assertEqual(PiaPage.filepath_from_source(12345, '/root'),
-#                                 '/root/PIA12xxx/PIA12345.txt')
-#         self.assertEqual(PiaPage.filepath_from_source('PIA12345', '/root'),
-#                                 '/root/PIA12xxx/PIA12345.txt')
-#         self.assertEqual(PiaPage.filepath_from_source(
-#                                 'PIA12xxx/PIA12345.whatever', '/root'),
-#                                 '/root/PIA12xxx/PIA12345.txt')
-#         self.assertEqual(PiaPage.filepath_from_source(PiaPage.PIA_URL +
-#                                              'PIA12345', '/root'),
-#                                 '/root/PIA12xxx/PIA12345.txt')
-# 
-#         self.assertEqual(PiaPage.filepath_from_source(1, ''),
-#                                 'PIA00xxx/PIA00001.txt')
-#         self.assertEqual(PiaPage.filepath_from_source(12345, ''),
-#                                 'PIA12xxx/PIA12345.txt')
-#         self.assertEqual(PiaPage.filepath_from_source('PIA12345', ''),
-#                                 'PIA12xxx/PIA12345.txt')
-#         self.assertEqual(PiaPage.filepath_from_source(
-#                                 'PIA12xxx/PIA12345.whatever', ''),
-#                                 'PIA12xxx/PIA12345.txt')
-#         self.assertEqual(PiaPage.filepath_from_source(PiaPage.PIA_URL +
-#                                              'PIA12345', ''),
-#                                 'PIA12xxx/PIA12345.txt')
-# 
-#         # Tests of url_from_source
-#         self.assertEqual(PiaPage.url_from_source(1),
-#                                         PiaPage.PIA_URL + 'PIA00001')
-#         self.assertEqual(PiaPage.url_from_source(12345),
-#                                         PiaPage.PIA_URL + 'PIA12345')
-#         self.assertEqual(PiaPage.url_from_source('PIA12345'),
-#                                         PiaPage.PIA_URL + 'PIA12345')
-#         self.assertEqual(PiaPage.url_from_source('PIA12345'),
-#                                         PiaPage.PIA_URL + 'PIA12345')
-#         self.assertEqual(PiaPage.url_from_source(PiaPage.PIA_URL + 'PIA12345'),
-#                                         PiaPage.PIA_URL + 'PIA12345')
-# 
-#         self.assertRaises(ValueError, PiaPage.url_from_source,
-#                                         'https://pds-rings.seti.org')
-# 
-#         # Some of these will only work if PIAPATH is defined in the environment
-#         self.assertIn('PIAPATH', os.environ)
-# 
-#         html_from_file = PiaPage(1).html
-#         html_from_url = PiaPage(PiaPage.url_from_source(1), overwrite=True).html
-# 
-#         self.assertEqual(html_from_file, html_from_url)
+        id = PiaPage.get_id(id)
+        return PiaPage.JEKYLL_ROOT_ + GalleryPage.PRESS_RELEASES_SUBDIR_ + \
+                    'pages/%sxxx/%s.html' % (id[:5], id)
+
+    pattern = '"https{0,1}://' + PHOTOJOURNAL_DOMAIN + '/catalog/(PIA..)(...)"'
+    XREF_BEFORE = re.compile(pattern)
+    XREF_AFTER  = r'"/%spages/\1xxx/\1\2.html"' % \
+                                    GalleryPage.PRESS_RELEASES_SUBDIR_
+
+    TABLE0_BEFORE = re.compile('<table')
+    TABLE0_AFTER  = (r'\n<table width="840px">' +
+                     r'<tr id="noborder">' +
+                     r'<td id="noborder">\n' +
+                     r'<table style="margin-left:auto;margin-right:auto;"')
+
+    TABLE1_BEFORE = re.compile('</table>')
+    TABLE1_AFTER  = (r'</table>\n' +
+                     r'</td></tr></table>\n')
+
+    def write_jekyll(self, neighbors=None, replace=False, verbose=False):
+        """Uses the default method in _GalleryPage but fills in the default
+        arguments."""
+
+        path = PiaPage.jekyll_filepath_for_id(self.id)
+        parent = os.path.split(path)[0]
+        try:
+            os.makedirs(parent)
+        except OSError:
+            pass
+
+        if replace or not os.path.exists(path):
+            remote_keys = ['Movie Download Options',
+                           'Full-Res JPEG', 'Full-Res TIFF']
+
+            self._write_jekyll(path, remote_keys,
+                               [(PiaPage.XREF_BEFORE, PiaPage.XREF_AFTER),
+                                (PiaPage.TABLE0_BEFORE, PiaPage.TABLE0_AFTER),
+                                (PiaPage.TABLE1_BEFORE, PiaPage.TABLE1_AFTER)],
+                                neighbors=neighbors)
+
+            if verbose:
+                print 'Jekyll file written: ' + path
 
 ################################################################################
+# Catalog support functions
+#
+# A catalog is a dictionary of GalleryPage objects keyed by the product ID.
+# These are saved in pickle files.
+################################################################################
 
-# Run unit tests if you invoke the program from the command line
+def build_catalog(incremental=True, verbose=True, download=False, path=None):
+    """Update or replace a catalog of the PiaPage objects.
 
-if __name__ == '__main__':
-    unittest.main(verbosity=2)
+    Input:
+        incremental if True, the existing catalog is loaded and missing pages
+                    are added to it; otherwise, an entirely new catalog is
+                    written. Default is True for an incremental build.
+        verbose     True to report progress.
+        download    True to download pages not locally cached.
+    """
+
+    if not path:
+        path = PiaPage.CATALOG
+
+    if incremental:
+        try:
+            with open(path) as f:
+                piapages = pickle.load(f)
+
+            if verbose:
+                print 'catalog loaded'
+
+            updating = True
+        except:
+            piapages = {}
+            if verbose:
+                print 'starting new catalog'
+
+            updating = False
+    else:
+        updating = False
+        piapages = {}
+
+    for pia in range(1, MAX_PIAPAGE):
+
+        # Skip pages already in catalog if appropriate
+        if updating and pia in piapages: continue
+
+        # If not updating, print every 100th number
+        if verbose and not updating:
+            if pia % 100 == 0:
+                print pia   # Otherwise, print every 100th
+
+        # Try to read the PiaPage
+        try:
+            p = PiaPage(pia, download=download,
+                             images='planetary' if download else False,
+                             jekyll='planetary' if download else False)
+        except IOError:
+            continue
+        except ValueError as e:
+            print '**** Error in PIA%05d' % pia, e
+            continue
+
+        # Always skip non-planetary
+        if not p.is_planetary:
+            continue
+
+        if verbose and updating:
+            print pia       # If updating, print every new ID
+
+        piapages[p.id] = p
+
+    return piapages
+
+def save_catalog(catalog, path=None):
+    """Save a catalog. Pages are converted to StoredPage objects to reduce
+    the size of the file."""
+
+    if not path:
+        path = PiaPage.CATALOG
+
+    storedpage.save_catalog(catalog, path)
+
+def load_catalog(path=None):
+    """Load a dictionary of PiaPage objects as stored in a pickle file.
+
+    Note that they are converted back from StoredPage objects so some attributes
+    will be missing. However, all the required attributes are present.
+    """
+
+    if not path:
+        path = PiaPage.CATALOG
+
+    catalog = storedpage.load_catalog(path)
+
+    piapages = {}
+    for (key, value) in catalog.iteritems():
+        piapages[key] = PiaPage(value.id, _dict=value.__dict__)
+
+    return piapages
 
 ################################################################################

@@ -22,7 +22,7 @@ QUARTER_ABBREVS = ['', 'Jan-Mar', '', '', 'Apr-Jun', '', '',
 ################################################################################
 
 def by_release_date(catalog, fileroot, url_prefix, title_prefix,
-                    merge_limit=100):
+                    merge_limit=240, merge_early=True, merge_late=True):
     """Write a set of galleries based on release date and organized by month,
     quarter or year.
 
@@ -39,13 +39,18 @@ def by_release_date(catalog, fileroot, url_prefix, title_prefix,
                         single page. If several years at the beginning or end
                         of the catalog can be merged and will fall below this
                         limit, they are also merged.
+        merge_early     True to merge the earliest years of possible.
+        merge_late      True to merge the latest years if possible.
     """
 
     def _title(key):
         """A suitable title for the page, based on the dictionary key."""
 
-        if len(key) == 4:
+        if len(key) == 4:       # one year
             return title_prefix + ' for ' + key
+
+        if '-' in key:          # range of years
+            return title_prefix + ' ' + key
 
         if grouping == 'month':
             month = MONTH_NAMES[int(key[5:])]
@@ -72,8 +77,6 @@ def by_release_date(catalog, fileroot, url_prefix, title_prefix,
     for (product_id, page) in catalog.iteritems():
         tuples.append((page.release_date, product_id))
 
-    tuples.sort()
-
     # Group by month
     by_month = {}
     for (release_date, product_id) in tuples:
@@ -85,6 +88,9 @@ def by_release_date(catalog, fileroot, url_prefix, title_prefix,
 
     yyyy_mm = by_month.keys()
     yyyy_mm.sort()
+
+    first_year = yyyy_mm[0][:4]
+    last_year = yyyy_mm[-1][:4]
 
     # Group by quarter
     by_quarter = {}
@@ -111,7 +117,20 @@ def by_release_date(catalog, fileroot, url_prefix, title_prefix,
     qcount_max = max([len(by_quarter[k]) for k in by_quarter])
 
     # Determine how to organize the page
-    if ycount_max <= merge_limit:
+    if len(tuples) <= merge_limit:
+        grouping = 'all'
+        years = list(by_year.keys())
+        years.sort()
+        if len(years) == 1:
+            key = years[0]
+        else:
+            key = years[0] + '-' + years[-1]
+
+        all_years = []
+        for year in years:
+            all_years += by_year[year]
+        by_date= {key: all_years}
+    elif ycount_max <= merge_limit:
         grouping = 'year'
         by_date = by_year
     elif qcount_max <= merge_limit:
@@ -121,46 +140,49 @@ def by_release_date(catalog, fileroot, url_prefix, title_prefix,
         grouping = 'month'
         by_date = by_month
 
+    keys = list(by_date.keys())
+    keys.sort()
+
     # Merge entire years if possible
 
     years_merged = []
     years_unmerged = []
 
-    year_keys = by_year.keys()
-    year_keys.sort()
+    if grouping != 'all':
+        year_keys = by_year.keys()
+        year_keys.sort()
 
-    if grouping == 'year':
-        years_merged = [int(y) for y in year_keys]
+        if grouping == 'year':
+            years_merged = [int(y) for y in year_keys]
 
-    else:
-        for year_key in year_keys:
-            thumbnails = len(by_year[year_key])
-            if thumbnails <= merge_limit:
-                years_merged.append(int(year_key))
-                by_date[year_key] = by_year[year_key]
-            else:
-                years_unmerged.append(int(year_key))
+        else:
+            for year_key in year_keys:
+                thumbnails = len(by_year[year_key])
+                if thumbnails <= merge_limit:
+                    years_merged.append(int(year_key))
+                    by_date[year_key] = by_year[year_key]
+                else:
+                    years_unmerged.append(int(year_key))
 
-            keys_to_delete = []
-            for year in years_merged:
-                year_key = str(year)
-                for key in by_date:
-                    if len(key) > 4 and key[:4] == year_key:
-                        keys_to_delete.append(key)
+                keys_to_delete = []
+                for year in years_merged:
+                    year_key = str(year)
+                    for key in by_date:
+                        if len(key) > 4 and key[:4] == year_key:
+                            keys_to_delete.append(key)
 
-            for key in keys_to_delete:
-                del by_date[key]
+                for key in keys_to_delete:
+                    del by_date[key]
 
         keys = by_date.keys()
         keys.sort()
 
     # Merge multiple early years if possible
-    year_limit = min(merge_limit,
-                      max([len(v) for v in by_date.values()]))
-        # don't merge to exceed the size of the largest page
-
     early_year = None
-    if years_merged:
+    year_limit = min(merge_limit, max([len(v) for v in by_date.values()]))
+            # don't merge to exceed the size of the largest page
+
+    if grouping != 'all' and years_merged and merge_early:
         y0 = years_merged[0]
         cumsum = 0
         count = 0
@@ -195,7 +217,7 @@ def by_release_date(catalog, fileroot, url_prefix, title_prefix,
 
     # Merge multiple late years if possible
     late_year = None
-    if years_merged:
+    if grouping != 'all' and years_merged and merge_late:
         y0 = years_merged[-1]
         cumsum = 0
         count = 0
@@ -241,50 +263,57 @@ def by_release_date(catalog, fileroot, url_prefix, title_prefix,
 
     # Create the first tuple
     key = keys[0]
-    filename = url_prefix + '.html'
-
-    if early_year:
-        title = title_prefix + ' before ' + str(early_year)
-        label = 'Pre-' + str(early_year)
-        info = (key, filename, label, title)
-    elif len(key) == 4:
+    if len(keys) == 1:
+        filename = url_prefix + '.html'
         info = (key, filename, key, _title(key))
     else:
-        info = (key, filename, key[:4], key + ' ' + _label(key), _title(key))
+        filename = url_prefix + '_' + key + '.html'
+
+        if early_year:
+            year_range = first_year + '-' + str(early_year)
+            title = _title(year_range)
+            label = year_range
+            info = (key, filename, label, title)
+        elif len(key) == 4:
+            info = (key, filename, key, _title(key))
+        else:
+            info = (key, filename, key[:4], key + ' ' + _label(key), _title(key))
 
     tuples.append(info)
     product_ids[filename] = by_date[key]
 
-    # Loop through intermediate entries
-    prev_year = key[:4]
-    for key in keys[1:-1]:
-        if len(key) == 4:
-            filename = url_prefix + '_' + key + '.html'
-            info = (key, filename, key, _title(key))
-        elif key[:4] == prev_year:
-            filename = url_prefix + '_' + key + '.html'
-            info = (key, filename, _label(key), _title(key))
+    if len(keys) > 1:
+        # Loop through intermediate entries
+        prev_year = key[:4]
+        for key in keys[1:-1]:
+            if len(key) == 4:
+                filename = url_prefix + '_' + key + '.html'
+                info = (key, filename, key, _title(key))
+            elif key[:4] == prev_year:
+                filename = url_prefix + '_' + key + '.html'
+                info = (key, filename, _label(key), _title(key))
+            else:
+                filename = url_prefix + '_' + key[:4] + '.html'
+                info = (key, filename, key[:4], key[:4] + ' ' + _label(key),
+                                                                _title(key))
+
+            tuples.append(info)
+            product_ids[filename] = by_date[key]
+            prev_year = key[:4]
+
+        # Create final tuple
+        key = keys[-1]
+        filename = url_prefix + '.html'
+        if late_year:
+            year_range = str(late_year+1) + '-' + last_year
+            title = _title(year_range)
+            label = year_range
+            info = (key, filename, label, title)
         else:
-            filename = url_prefix + '_' + key[:4] + '.html'
-            info = (key, filename, key[:4], key[:4] + ' ' + _label(key),
-                                                            _title(key))
+            info = (key, filename, _label(key), _title(key))
 
         tuples.append(info)
         product_ids[filename] = by_date[key]
-        prev_year = key[:4]
-
-    # Create final tuple
-    key = keys[-1]
-    filename = url_prefix + '_' + key + '.html'
-    if late_year:
-        title = _title(key) + ' and after'
-        label = 'Post-' + str(late_year)
-        info = (key, filename, label, title)
-    else:
-        info = (key, filename, _label(key), _title(key))
-
-    tuples.append(info)
-    product_ids[filename] = by_date[key]
 
     # Right now the list of tuples is flat. Create sublists where needed.
 
@@ -307,7 +336,7 @@ def by_release_date(catalog, fileroot, url_prefix, title_prefix,
 ################################################################################
 
 def by_target(catalog, fileroot, url_prefix, title_prefix, targets,
-              page_limit=200):
+              page_limit=240, target_types=False, plurals=[]):
     """Write a set of target-by-target galleries.
 
     Input:
@@ -317,18 +346,26 @@ def by_target(catalog, fileroot, url_prefix, title_prefix, targets,
         url_prefix      string to put in front of each URL, e.g., 'cassini'.
         title_prefix    text to put in front of each title, e.g.,
                         'Cassini Press Releases'.
-        targets         an ordered list of target names in order.
+        targets         an ordered list of target names in order (or a list of
+                        target_types if target_types is True).
         page_limit      target number of thumbnail images per page. If all the
                         images of a target is less than or equal to this limit,
                         then they will all appear on a single page. If more
                         images exist, the images of the target will be split
                         across multiple pages, ordered by release date.
+        target_types    True to create a gallery page by target type instead of
+                        target.
+        plurals         optional list of plurals, to use in titles in place of
+                        the value in the targets list.
     """
 
     def _title(target, page, pages):
         """A suitable title for the page."""
 
-        if ('Ring' in target and 'Rings' not in target) or \
+        if plurals:
+                k = targets.index(target)
+                title = title_prefix + ' referring to ' + plurals[k]
+        elif ('Ring' in target and 'Rings' not in target) or \
             'Division' in target or 'Gap' in target or 'System' in target:
                 title = title_prefix + ' referring to the ' + target
         else:
@@ -352,17 +389,25 @@ def by_target(catalog, fileroot, url_prefix, title_prefix, targets,
     # Organize by target or system
     info = {}
     for (key, page) in catalog.iteritems():
-        for name in page.targets:
-            if name not in targets: continue
+
+        if target_types:
+            names = page.target_types
+        else:
+            names = page.targets
+
+        for name in names:
+            if name not in targets:
+                continue
 
             if name not in info:
                 info[name] = []
 
             info[name].append((page.release_date, key))
 
-        for name in page.systems:
+        for name in page.systems:       # optionally include system names
             sysname = name + ' System'
-            if sysname not in targets: continue
+            if sysname not in targets:
+                continue
 
             if sysname not in info:
                 info[sysname] = []
@@ -373,13 +418,18 @@ def by_target(catalog, fileroot, url_prefix, title_prefix, targets,
     links = []
     product_ids = {}
     for target in targets:
-        if target not in info: continue
+        if target not in info:
+            continue
 
         tuples = info[target]
         tuples.sort()
         ids = [t[1] for t in tuples]
 
-        filename_prefix = url_prefix + '_' + target.lower().replace(' ', '_')
+        filename_prefix = (url_prefix + '_' +
+                           target.lower().replace(' ', '_')
+                                         .replace('/','_')
+                                         .replace('(','')
+                                         .replace(')',''))
 
         if len(tuples) <= page_limit:
             filename = filename_prefix + '.html'
@@ -391,7 +441,7 @@ def by_target(catalog, fileroot, url_prefix, title_prefix, targets,
             pagesize = (len(tuples) + pages - 1) // pages
 
             # First page
-            filename = filename_prefix + '.html'
+            filename = filename_prefix + '_p01.html'
             links.append([(filename, target, _label(target, 1, pages),
                                              _title(target, 1, pages))])
             product_ids[filename] = ids[:pagesize]
@@ -406,7 +456,7 @@ def by_target(catalog, fileroot, url_prefix, title_prefix, targets,
                 ids = ids[pagesize:]
 
             # Last page
-            filename = filename_prefix + '_p%02d.html' % pages
+            filename = filename_prefix + '.html'
             links[-1].append((filename, _label(target, pages, pages),
                                         _title(target, pages, pages)))
             product_ids[filename] = ids
@@ -419,7 +469,7 @@ def by_target(catalog, fileroot, url_prefix, title_prefix, targets,
 ################################################################################
 
 def _gallery(fileroot, product_ids, catalog, links,
-             separators=('|','|'), linebreaks=True):
+             separators=('|','|'), linebreaks=True, bottom_nav=20):
     """Write a a complete set of Jekyll gallery pages of thumbnails with links
     between one another and to the image pages.
 
@@ -436,6 +486,9 @@ def _gallery(fileroot, product_ids, catalog, links,
                         sublists.
         linebreaks      number of adjacent sublists to show, separated by line
                         breaks
+        bottom_nav      number of items in the page before it adds prev/next
+                        navigation to the bottom of the page. True for always;
+                        False for never.
 
     The basic element in the links structure is a tuple
         (filename, label, title)
@@ -651,21 +704,23 @@ def _gallery(fileroot, product_ids, catalog, links,
           f.write('    float: left;\n')
           f.write('    padding: 3px;\n')
           f.write('}\n')
-          f.write('#thumbnail {\n')
+          f.write('td.thumbnail {\n')
           f.write('    border-left:   1px solid lightgrey;\n')
           f.write('    border-right:  1px solid lightgrey;\n')
           f.write('    border-top:    1px solid lightgrey;\n')
           f.write('    border-bottom: 0px;\n')
           f.write('    vertical-align: bottom;\n')
           f.write('    height: 100px;\n')
+          f.write('    text-align: 100px;\n')
           f.write('}\n')
-          f.write('#caption {\n')
+          f.write('td.caption {\n')
           f.write('    border-left:   1px solid lightgrey;\n')
           f.write('    border-right:  1px solid lightgrey;\n')
           f.write('    border-top:    0px;\n')
           f.write('    border-bottom: 1px solid lightgrey;\n')
           f.write('    vertical-align: top;\n')
           f.write('    height: 66px;\n')
+          f.write('    font-size: 10pt;\n')
           f.write('    max-height: 66px;\n')
           f.write('    word-wrap: break-word;\n')
           f.write('    overflow: hidden;\n')
@@ -681,73 +736,74 @@ def _gallery(fileroot, product_ids, catalog, links,
           f.write('<hr/>\n')
 
           # Write first/prev/next/last navigation
-          f.write('<p align="center">\n')
+          if nlinks > 1:
+            f.write('<p align="center">\n')
 
-          if neighbors[0] is None:
-              f.write('&lt;&lt; first |\n')
-          else:
-              f.write('<a href="%s">&lt;&lt; first</a> |\n' % neighbors[0][0])
+            if neighbors[0] is None:
+                f.write('&lt;&lt; first |\n')
+            else:
+                f.write('<a href="%s">&lt;&lt; first</a> |\n' % neighbors[0][0])
 
-          if neighbors[1] is None:
-              f.write('&lt; previous |\n')
-          else:
-              f.write('<a href="%s">&lt; previous</a> |\n' % neighbors[1][0])
+            if neighbors[1] is None:
+                f.write('&lt; previous |\n')
+            else:
+                f.write('<a href="%s">&lt; previous</a> |\n' % neighbors[1][0])
 
-          if neighbors[2] is None:
-              f.write('next &gt; |\n')
-          else:
-              f.write('<a href="%s">next &gt;</a> |\n' % neighbors[2][0])
+            if neighbors[2] is None:
+                f.write('next &gt; |\n')
+            else:
+                f.write('<a href="%s">next &gt;</a> |\n' % neighbors[2][0])
 
-          if neighbors[3] is None:
-              f.write('last &gt;&gt;\n')
-          else:
-              f.write('<a href="%s">last &gt;&gt;</a>\n' % neighbors[3][0])
+            if neighbors[3] is None:
+                f.write('last &gt;&gt;\n')
+            else:
+                f.write('<a href="%s">last &gt;&gt;</a>\n' % neighbors[3][0])
 
-          f.write('</p>\n\n')
+            f.write('</p>\n\n')
 
-          # Write complete navigation
-          f.write('<b>Jump to</b>:<br/>\n')
+            # Write complete navigation
+            f.write('<b>Jump to</b>:<br/>\n')
 
-          for jj in range(nlinks):
-            if jj != 0:
-              f.write(separators[0] + ' ')
+            for jj in range(nlinks):
+              if jj != 0:
+                f.write(separators[0] + ' ')
 
-            if linebreak_before[jj]:
-              f.write('<br/>')
+              if linebreak_before[jj]:
+                f.write('<br/>')
 
-            if sublist_is_open[jj]:
-              (url, _, label_if_open, _) = links[jj][0]
-              if filename == url:
-                f.write('[%s<b>%s</b>\n' % (spacer, label_if_open))
-              else:
-                f.write('[%s<a href="%s">%s</a>\n' % (spacer, url,
-                                                      label_if_open))
-
-              for kk in range(1, len(links[jj])-1):
-                (url, _, label_if_open, _) = links[jj][kk]
+              if sublist_is_open[jj]:
+                (url, _, label_if_open, _) = links[jj][0]
                 if filename == url:
-                  f.write('%s <b>%s</b>\n' % (separators[1], label_if_open))
+                  f.write('[%s<b>%s</b>\n' % (spacer, label_if_open))
                 else:
-                  f.write('%s <a href="%s">%s</a>\n' % (separators[1], url,
+                  f.write('[%s<a href="%s">%s</a>\n' % (spacer, url,
                                                         label_if_open))
 
-              (url, _, label_if_open, _) = links[jj][-1]
-              if filename == url:
-                f.write('%s <b>%s</b>%s]\n' % (separators[1], label_if_open,
-                                               spacer))
-              else:
-                f.write('%s <a href="%s">%s</a>%s]\n' % (separators[1], url,
-                                                       label_if_open, spacer))
+                for kk in range(1, len(links[jj])-1):
+                  (url, _, label_if_open, _) = links[jj][kk]
+                  if filename == url:
+                    f.write('%s <b>%s</b>\n' % (separators[1], label_if_open))
+                  else:
+                    f.write('%s <a href="%s">%s</a>\n' % (separators[1], url,
+                                                          label_if_open))
 
-            else:
-              (url, label_if_closed, _, _) = links[jj][0]
-              if filename == url:
-                f.write('<b>%s</b>\n' % label_if_closed)
-              else:
-                f.write('<a href="%s">%s</a>\n' % (url, label_if_closed))
+                (url, _, label_if_open, _) = links[jj][-1]
+                if filename == url:
+                  f.write('%s <b>%s</b>%s]\n' % (separators[1], label_if_open,
+                                                 spacer))
+                else:
+                  f.write('%s <a href="%s">%s</a>%s]\n' % (separators[1], url,
+                                                         label_if_open, spacer))
 
-          f.write('<hr/>\n')
-          f.write('<div align="left">\n')
+              else:
+                (url, label_if_closed, _, _) = links[jj][0]
+                if filename == url:
+                  f.write('<b>%s</b>\n' % label_if_closed)
+                else:
+                  f.write('<a href="%s">%s</a>\n' % (url, label_if_closed))
+
+            f.write('<hr/>\n')
+            f.write('<div align="left">\n')
 
           # Write the thumbnails
           for id in product_ids[filename]:
@@ -767,10 +823,10 @@ def _gallery(fileroot, product_ids, catalog, links,
             escaped = title.encode('ascii', 'xmlcharrefreplace')
             unquoted = escaped.replace('"', '&quot;')
 
-            f.write('  <div class="floated_img" align="center">\n')
-            f.write('    <table border="0" width="%d">\n' % width)
+            f.write('  <div class="floated_img">\n')
+            f.write('    <table border="0" width="%d" style="border:1px lightsolid gray;">\n' % width)
             f.write('      <tr>\n')
-            f.write('        <td id="thumbnail">\n')
+            f.write('        <td class="thumbnail">\n')
             f.write('          <a href="%s">\n' %
                                  catalog[id].local_page_url)
             f.write('            <img src="%s"\n' %
@@ -781,23 +837,47 @@ def _gallery(fileroot, product_ids, catalog, links,
             f.write('        </td>\n')
             f.write('      </tr>\n')
             f.write('      <tr>\n')
-            f.write('        <td id="caption">\n')
+            f.write('        <td class="caption">\n')
 
             if is_movie:
                 f.write('          <img src="/icons-local/movie_icon.png"\n')
                 f.write('               alt="Movie icon">\n')
 
-            f.write('          <font size="2">\n')
-            f.write('            <a href="%s">\n' %
-                                   catalog[id].local_page_url)
+            f.write('          <a href="%s">\n' %
+                                catalog[id].local_page_url)
             f.write('              %s\n' % escaped)
-            f.write('            </a>\n')
-            f.write('          </font>\n')
+            f.write('          </a>\n')
             f.write('        </td>\n')
             f.write('      </tr>\n')
             f.write('    </table>\n')
             f.write('  </div>\n\n')
 
           f.write('</div>\n\n')
+
+          # Repeat first/prev/next/last navigation
+          if nlinks >= 1 and (bottom_nav is True or nlinks >= bottom_nav):
+            f.write('<div><br clear="all" /><br/><p align="center">\n')
+
+            if neighbors[0] is None:
+                f.write('&lt;&lt; first |\n')
+            else:
+                f.write('<a href="%s">&lt;&lt; first</a> |\n' % neighbors[0][0])
+
+            if neighbors[1] is None:
+                f.write('&lt; previous |\n')
+            else:
+                f.write('<a href="%s">&lt; previous</a> |\n' % neighbors[1][0])
+
+            if neighbors[2] is None:
+                f.write('next &gt; |\n')
+            else:
+                f.write('<a href="%s">next &gt;</a> |\n' % neighbors[2][0])
+
+            if neighbors[3] is None:
+                f.write('last &gt;&gt;\n')
+            else:
+                f.write('<a href="%s">last &gt;&gt;</a>\n' % neighbors[3][0])
+
+            f.write('</p><br/></div>\n\n')
 
 ################################################################################
