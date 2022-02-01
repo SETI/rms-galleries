@@ -152,8 +152,19 @@ subdirectory of this repo.
 10. Before you can process the Jekyll files and push the HTML to the local website, you need to create
     links inside your local copy of the ``SETI/pds-website`` repo:
 
-        ln -s <abspath to this repo>/jekyll/galleries <abspath to pds-website repo>/website_galleries/galleries
-        ln -s <abspath to this repo>jekyll/press_releases <abspath to pds-website repo>/website_galleries/press_releases
+        cd <path to pds-website repo>
+
+        mkdir website_galleries
+        ln -s website/_config.production.yml website_galleries/_config.yml
+        ln -s website/_config.yml  website_galleries/_config.yml
+        ln -s website/_data     website_galleries/_data
+        ln -s website/_includes website_galleries/_includes
+        ln -s website/_layouts  website_galleries/_layouts
+        ln -s website/_posts    website_galleries/_posts
+        ln -s website/_sass     website_galleries/_sass
+
+        ln -s <path to this repo>/jekyll/galleries      website_galleries/galleries
+        ln -s <path to this repo>/jekyll/press_releases website_galleries/press_releases
 
 11. To deploy to your local copy of the website:
 
