@@ -196,6 +196,7 @@ INSTRUMENT_FULL_NAMES = {
     'pacs'                                      : 'Photodetector Array Camera & Spectrometer (PACS)',
     'pancam'                                    : 'Panoramic Camera (Pancam)',
     'panoramic camera'                          : 'Panoramic Camera (Pancam)',
+    'photopolarimeter-radiometer'               : 'Photopolarimeter-Radiometer (PPR)',
     'photopolarimeter subsystem'                : 'Photopolarimeter Subsystem (PPS)',
     'pims'                                      : 'Plasma Instrument for Magnetic Sounding (PIMS)',
     'pixl'                                      : 'Planetary Instrument for X-ray Lithography (PIXL)',

@@ -101,6 +101,7 @@ TARGET_FULL_NAMES = {
     'kepler-22b'    : ('Kepler-22'              , 'Exoplanet'   , 'Kepler-22'),
     'hd 189733b'    : ('HD 189733'              , 'Exoplanet'   , 'HD 189733'),
     'hd 149026b'    : ('HD 149026'              , 'Exoplanet'   , 'HD 149026'),
+    'kelt-9b'       : ('KELT-9'                 , 'Exoplanet'   , 'KELT-9'   ),
 
     'protostellar disk l1157':  ('L1157'        , 'Exoplanet'   , 'L1157'),
 
