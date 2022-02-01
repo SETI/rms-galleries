@@ -127,12 +127,13 @@ KEYWORDS['General'] = [
     ('HD (188553|188753|189733)',           ['Exoplanet+T', r'HD \1+t+s'            ]),
     ('HD (209458|219134)',                  ['Exoplanet+T', r'HD \1+t+s'            ]),
     ('HIP (79124|116454)',                  ['Exoplanet+T', r'HIP \1+t+s'           ]),
-    ('HR (8799)',                           ['Exoplanet+T', r'HR \1+t+s'            ]),
+    ('HR ?(8799)',                          ['Exoplanet+T', r'HR \1+t+s'            ]),
     ('(IC 1396)',                           ['Exoplanet+T', r'\1+t+s'               ]),
     ('K2.(\d+)',                            ['Exoplanet+T', r'K2-\1+t+s'            ]),
+    ('KELT.9',                              ['Exoplanet+T', 'KELT-9+t+s'            ]),
     ('Kepler.(\d+)',                        ['Exoplanet+T', r'Kepler-\1+t+s'        ]),
     ('KIC (\d+)',                           ['Exoplanet+T', r'KIC \1+t+s'           ]),
-    ('KOI.?691',                            ['Exoplanet+T', r'Kepler 42+t+s'        ]),     # renamed
+    ('KOI.?961',                            ['Exoplanet+T', r'Kepler-42+t+s'        ]),     # renamed
     ('(LHS 3844)',                          ['Exoplanet+T', r'\1+t+s'               ]),
     ('(L1157)',                             ['Exoplanet+T', r'\1+t+s'               ]),
     ('M(inkowski )?2-9',                    ['Exoplanet+T', 'Minkowski 2-9+t+s'     ]),
@@ -145,6 +146,7 @@ KEYWORDS['General'] = [
     ('[uU]psilon Andromedae',               ['Exoplanet+T', 'Upsilon Andromedae+t+s']),
     ('UX Tau A',                            ['Exoplanet+T', 'UX Tau A+t+s'          ]),
     ('[^A-Za-z](VB 10)',                    ['Exoplanet+T', r'\1+t+s'               ]),
+    ('WASP-12',                             ['Exoplanet+T', 'WASP-12+t+s'           ]),
 
     ('[Hh]eliosphere',                      ['Heliosphere+t+T', 'Solar System+s']),
 
@@ -290,6 +292,7 @@ KEYWORDS['Jupiter'] = [
     ('Jup.*Probe.*Galileo',             ['Jupiter+t', 'Planet+T', 'Galileo+m', 'Galileo Probe+h', 'Probe+H']),
     ('JUICE',                           ['Jupiter+t+s', 'Planet+T', 'Jupiter Icy Moons Explorer+h', 'Jupiter Icy Moons Explorer (JUICE)+m']),
     ('RIME',                            ['Jupiter+t+s', 'Planet+T', 'Jupiter Icy Moons Explorer+h', 'Jupiter Icy Moons Explorer (JUICE)+m', 'Radar for Icy Moon Exploration (RIME)+i']),
+    ('PPR',                             ['Jupiter+t+s', 'Planet+T', 'Galileo Orbiter+h', 'Orbiter+H', 'Photopolarimeter-Radiometer (PPR)+i']),
 
     ('S/20[0-9][0-9] *J *[1-9][0-9]*',  ['Jupiter+s', r'\1+t', 'Satellite+T', 'Irregular+T']),
     ('Jovian.{0,10} [Rr]ing',           ['Jupiter+s', 'Jupiter Rings+t', 'Ring+T']),
@@ -664,8 +667,8 @@ KEYWORDS['Juno'] = [
 KEYWORDS['Exoplanet'] = [
     ('Vega(?![a-z])',                                   ['Exoplanet+T', 'Vega+t+s'      ]),
     ('WASP[^\d]?(\d+)',                                 ['Exoplanet+T', r'WASP-\1+t+s'  ]),
-    ('orbit',                                           ['orbit']),
-    ('disk',                                            ['disk']),
+    ('[Oo]rbit',                                        ['Orbit']),
+    ('[Dd]isk',                                         ['Disk']),
 ]
 
 # Keywords to search for if 'Deep Space Network (DSN)' appears

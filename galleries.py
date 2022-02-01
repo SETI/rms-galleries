@@ -179,8 +179,8 @@ def by_release_date(catalog, fileroot, url_prefix, title_prefix,
 
     # Merge multiple early years if possible
     early_year = None
-    year_limit = min(merge_limit, max([len(v) for v in by_date.values()]))
-            # don't merge to exceed the size of the largest page
+    year_limit = min(merge_limit, max([len(v) for v in by_date.values()]) + merge_limit//4)
+            # don't merge to exceed far beyond the size of the largest page
 
     if grouping != 'all' and years_merged and merge_early:
         y0 = years_merged[0]
@@ -226,6 +226,9 @@ def by_release_date(catalog, fileroot, url_prefix, title_prefix,
             ystop = years_unmerged[-1]
         else:
             ystop = years_merged[0] - 1
+
+        if early_year:
+            ystop = max(ystop, early_year)
 
         for y1 in range(y0, ystop, -1):
             key = str(y1)
@@ -704,20 +707,17 @@ def _gallery(fileroot, product_ids, catalog, links,
           f.write('    float: left;\n')
           f.write('    padding: 3px;\n')
           f.write('}\n')
+          f.write('.floated_img table {\n')
+          f.write('    width: 200px;\n')
+          f.write('    border: 1px solid lightgrey;\n')
+          f.write('    border-collapse: collapse;\n')
+          f.write('}\n')
           f.write('td.thumbnail {\n')
-          f.write('    border-left:   1px solid lightgrey;\n')
-          f.write('    border-right:  1px solid lightgrey;\n')
-          f.write('    border-top:    1px solid lightgrey;\n')
-          f.write('    border-bottom: 0px;\n')
           f.write('    vertical-align: bottom;\n')
           f.write('    height: 100px;\n')
           f.write('    text-align: 100px;\n')
           f.write('}\n')
           f.write('td.caption {\n')
-          f.write('    border-left:   1px solid lightgrey;\n')
-          f.write('    border-right:  1px solid lightgrey;\n')
-          f.write('    border-top:    0px;\n')
-          f.write('    border-bottom: 1px solid lightgrey;\n')
           f.write('    vertical-align: top;\n')
           f.write('    height: 66px;\n')
           f.write('    font-size: 10pt;\n')
@@ -732,7 +732,6 @@ def _gallery(fileroot, product_ids, catalog, links,
           f.write('</style>\n\n')
 
           f.write('<h1>%s</h1>\n\n' % escaped)
-
           f.write('<hr/>\n')
 
           # Write first/prev/next/last navigation
@@ -802,7 +801,7 @@ def _gallery(fileroot, product_ids, catalog, links,
                 else:
                   f.write('<a href="%s">%s</a>\n' % (url, label_if_closed))
 
-            f.write('<hr/>\n')
+#             f.write('<hr/>\n')
             f.write('<div align="left">\n')
 
           # Write the thumbnails
@@ -824,7 +823,7 @@ def _gallery(fileroot, product_ids, catalog, links,
             unquoted = escaped.replace('"', '&quot;')
 
             f.write('  <div class="floated_img">\n')
-            f.write('    <table border="0" width="%d" style="border:1px lightsolid gray;">\n' % width)
+            f.write('    <table width="%d">\n' % width)
             f.write('      <tr>\n')
             f.write('        <td class="thumbnail">\n')
             f.write('          <a href="%s">\n' %
@@ -855,7 +854,7 @@ def _gallery(fileroot, product_ids, catalog, links,
           f.write('</div>\n\n')
 
           # Repeat first/prev/next/last navigation
-          if nlinks >= 1 and (bottom_nav is True or nlinks >= bottom_nav):
+          if nlinks >= 1 and (bottom_nav is True or len(product_ids[filename]) >= bottom_nav):
             f.write('<div><br clear="all" /><br/><p align="center">\n')
 
             if neighbors[0] is None:

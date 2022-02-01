@@ -54,16 +54,16 @@ class StoredPage(GalleryPage):
 
         self.is_planetary       = page.is_planetary
 
-        self._keywords          = page.keywords
-        self._missions          = page.missions
-        self._host_types        = page.host_types
-        self._hosts             = page.hosts
-        self._instruments       = page.instruments
-        self._detectors         = page.detectors
-        self._targets           = page.targets
-        self._target_types      = page.target_types
-        self._systems           = page.systems
-        self._dates             = page.dates
+        self._keywords              = page.keywords
+        self._missions_filled       = page.missions
+        self._host_types_filled     = page.host_types
+        self._hosts_filled          = page.hosts
+        self._instruments_filled    = page.instruments
+        self._detectors_filled      = page.detectors
+        self._targets_filled        = page.targets
+        self._target_types_filled   = page.target_types
+        self._systems_filled        = page.systems
+        self._dates_filled          = page.dates
 
         self.local_medium_url   = page.local_medium_url
         self.local_small_url    = page.local_small_url
