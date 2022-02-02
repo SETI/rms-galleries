@@ -763,7 +763,7 @@ def _gallery(fileroot, product_ids, catalog, links,
             f.write('</p>\n\n')
 
             # Write complete navigation
-            f.write('<b>Jump to</b>:<br/>\n')
+            f.write('<p><b>Jump to</b>:<br/>\n')
 
             for jj in range(nlinks):
               if jj != 0:
@@ -803,7 +803,7 @@ def _gallery(fileroot, product_ids, catalog, links,
                 else:
                   f.write('<a href="%s">%s</a>\n' % (url, label_if_closed))
 
-#             f.write('<hr/>\n')
+            f.write('</p>\n')
             f.write('<div align="left">\n')
 
           # Write the thumbnails
