@@ -715,11 +715,14 @@ def _gallery(fileroot, product_ids, catalog, links,
           f.write('td.thumbnail {\n')
           f.write('    vertical-align: bottom;\n')
           f.write('    height: 100px;\n')
-          f.write('    text-align: 100px;\n')
+          f.write('    text-align: center;\n')
+          f.write('    margin-left: auto;\n')
+          f.write('    margin-right: auto;\n')
           f.write('    border: none;\n')
           f.write('}\n')
           f.write('td.caption {\n')
           f.write('    vertical-align: top;\n')
+          f.write('    text-align: center;\n')
           f.write('    height: 66px;\n')
           f.write('    font-size: 10pt;\n')
           f.write('    max-height: 66px;\n')
@@ -738,7 +741,7 @@ def _gallery(fileroot, product_ids, catalog, links,
 
           # Write first/prev/next/last navigation
           if nlinks > 1:
-            f.write('<p align="center">\n')
+            f.write('<div>\n<p style="text-align:center;">\n')
 
             if neighbors[0] is None:
                 f.write('&lt;&lt; first |\n')
@@ -803,10 +806,10 @@ def _gallery(fileroot, product_ids, catalog, links,
                 else:
                   f.write('<a href="%s">%s</a>\n' % (url, label_if_closed))
 
-            f.write('</p>\n')
-            f.write('<div align="left">\n')
+            f.write('</p></div>\n')
 
           # Write the thumbnails
+          f.write('<div align="left">\n')
           for id in product_ids[filename]:
             title = catalog[id].title
             is_movie = catalog[id].is_movie
@@ -833,7 +836,7 @@ def _gallery(fileroot, product_ids, catalog, links,
             f.write('            <img src="%s"\n' %
                                  catalog[id].local_thumbnail_url)
             f.write('                 alt="%s: %s"\n' % (id, unquoted))
-            f.write('                 align="center" height="100">\n')
+            f.write('                 height="100">\n')
             f.write('          </a>\n')
             f.write('        </td>\n')
             f.write('      </tr>\n')
@@ -856,8 +859,8 @@ def _gallery(fileroot, product_ids, catalog, links,
           f.write('</div>\n\n')
 
           # Repeat first/prev/next/last navigation
-          if nlinks >= 1 and (bottom_nav is True or len(product_ids[filename]) >= bottom_nav):
-            f.write('<div><br clear="all" /><br/><p align="center">\n')
+          if nlinks > 1 and (bottom_nav is True or len(product_ids[filename]) >= bottom_nav):
+            f.write('<div><br clear="all" /><br/><p style="text-align:center;">\n')
 
             if neighbors[0] is None:
                 f.write('&lt;&lt; first |\n')
