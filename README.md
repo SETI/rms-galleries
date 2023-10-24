@@ -1,4 +1,4 @@
-# pds-galleries
+# rms-gallerie
 
 ## Quick notes from Mark 1/30/2022
 
@@ -12,7 +12,7 @@
 
 ## GalleryPage
 
-- The superclass of all gallery pages is __GalleryPage__, defined in ``gallerypage.py``. 
+- The superclass of all gallery pages is __GalleryPage__, defined in ``gallerypage.py``.
     - This class defines a number of properties and methods that ought to be useful
       across multiple families of gallery pages.
     - These properties include ``is_planetary``, ``targets``, ``target_types``,
@@ -118,7 +118,7 @@ of Technology in Pasadena, manages the mission....
    variable.)
 4. Right now, we are only tracking Photojournal pages up to 25999. If we have started to
    see pages above 25900 or so, edit ``piapage/MAX_PIAPAGE.py`` to specify a higher limit.
-5. ``cd`` to the ``pds-galleries`` repo directory.
+5. ``cd`` to the ``rms-galleries`` repo directory.
 6. In an ipython2 session...
 
         import piapage
@@ -150,10 +150,10 @@ At this point, the Jekyll galleries have been written to the ``jekyll/galleries`
 subdirectory of this repo.
 
 10. Before you can process the Jekyll files and push the HTML to the local website, you need to create
-    links inside your local copy of the ``SETI/pds-website`` repo:
+    links inside your local copy of the ``SETI/rms-website`` repo:
 
-        GALLERIES=<path to pds-galleries repo>
-        cd <path to pds-website repo>
+        GALLERIES=<path to rms-gallerie repo>
+        cd <path to rms-website repo>
 
         mkdir website_galleries
         ln -s website/_config.production.yml website_galleries/_config.production.yml
@@ -169,12 +169,12 @@ subdirectory of this repo.
 
 11. To deploy to your local copy of the website:
 
-        cd <path to pds-website repo>/deploy
+        cd <path to rms-website repo>/deploy
         fab deploy localhost_galleries
 
 12. Alternatively, to deploy to the local "8080" version of the website:
 
-        cd <path to pds-website repo>/deploy
+        cd <path to rms-website repo>/deploy
         fab deploy localhost_8080_galleries
 
 13. Review the local website. Visit:
@@ -233,7 +233,7 @@ mission, etc.
     that this command only works from a server that has a current, up to date
     copy of the galleries and press releases.
 
-        cd <path to pds-website repo>/deploy
+        cd <path to rms-website repo>/deploy
         fab deploy server1_galleries
         fab deploy server2_galleries
 
