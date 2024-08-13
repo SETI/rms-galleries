@@ -1,4 +1,4 @@
-# rms-gallerie
+# rms-galleries
 
 ## Quick notes from Mark 1/30/2022
 
@@ -152,7 +152,7 @@ subdirectory of this repo.
 10. Before you can process the Jekyll files and push the HTML to the local website, you need to create
     links inside your local copy of the ``SETI/rms-website`` repo:
 
-        GALLERIES=<path to rms-gallerie repo>
+        GALLERIES=<path to rms-galleries repo>
         cd <path to rms-website repo>
 
         mkdir website_galleries
