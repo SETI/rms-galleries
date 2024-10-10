@@ -129,7 +129,7 @@ TARGET_FULL_NAMES = {
 }
 
 # Always key a target by its actual full name too
-for info in TARGET_FULL_NAMES.values():
+for info in list(TARGET_FULL_NAMES.values()):
     TARGET_FULL_NAMES[info[0].lower()] = info
 
 ################################################################################

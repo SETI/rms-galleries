@@ -28,10 +28,12 @@ from dicts import (
     TARGET_FULL_NAMES,
 )
 
+from HTML_SYMBOLS import HTML_SYMBOLS
+
 # Compile regular expressions for KEYWORDS
 KEYWORD_USAGE = {}
 compiled = {}
-for (category, pairs) in KEYWORDS.iteritems():
+for (category, pairs) in KEYWORDS.items():
     KEYWORD_USAGE[category] = {}
 
     new_pairs = []
@@ -126,19 +128,20 @@ class GalleryPage(object):
 
     @staticmethod
     def soup_as_text(soup):
-        if hasattr(soup, 'contents'):
-            text = ' '.join([GalleryPage.soup_as_text(s)
-                             for s in soup.contents])
-        elif hasattr(soup, 'text'):
-            text = soup.text
-        elif hasattr(soup, 'string'):
-            text = soup.string
-        else:
-            text = ''
+        text = soup.text
+#         if hasattr(soup, 'contents'):
+#             text = ' '.join([GalleryPage.soup_as_text(s)
+#                              for s in soup.contents])
+#         elif hasattr(soup, 'text'):
+#             text = soup.text
+#         elif hasattr(soup, 'string'):
+#             text = soup.string
+#         else:
+#             text = ''
 
         text = text.strip()
         text = text.replace('\r', ' ').replace('\n', ' ')
-        text = str(text.encode('ascii', 'xmlcharrefreplace'))
+        text = GalleryPage._escape_html(text)
 
         while '  ' in text:
             text = text.replace('  ', ' ')
@@ -308,7 +311,7 @@ class GalleryPage(object):
                 if len(test) == 1:
                     primary = test[0]
 
-                # Failing that, see if there is exactly 
+                # Failing that, see if there is exactly
                 else:
                     test = self._keywords_with_suffixes_from_background
                     test = {k.partition('+')[0] for k in test if suffix in k}
@@ -669,7 +672,7 @@ class GalleryPage(object):
 
         # Cache the result the first time this is called
         if not hasattr(self, '_keywords_with_suffixes_from_title_found'):
-            title = self.title.replace('Moon', 'moon') 
+            title = self.title.replace('Moon', 'moon')
                 # Avoid being fooled by capitalization of title!
             self._keywords_with_suffixes_from_title_found = \
                                 find_keywords(title, self)
@@ -959,6 +962,27 @@ class GalleryPage(object):
     # Jekyll output
     ############################################################################
 
+    _HTML_NUMERIC_SYMBOL = re.compile(r'(&#\d+;)')
+
+    def _escape_html(text):
+        """Escape the given text for HTML; replace numeric symbols if possible.
+
+        It is assumed that any occurrences of "<" and ">" are HTML tags embedded
+        in the text, so these are not escaped.
+        """
+
+        text = text.encode('ascii', 'xmlcharrefreplace').decode()
+        # text = text.replace('>', '&lt;').replace('<', '&gt;')
+
+        # Replace numeric HTML symbols by their standard values if possible
+        parts = GalleryPage._HTML_NUMERIC_SYMBOL.split(text)
+        for k, part in enumerate(parts):
+            if k%2 == 0:
+                continue
+            parts[k] = HTML_SYMBOLS.get(part, part)
+
+        return ''.join(parts)
+
     def _write_jekyll(self, filepath, remote_keys, replacements,
                             neighbors=None):
         """Write Jekyll file.
@@ -976,7 +1000,7 @@ class GalleryPage(object):
         with open(filepath, 'w') as f:
 
             # Write Jekyll header
-            escaped = self.title.encode('ascii', 'xmlcharrefreplace')
+            escaped = GalleryPage._escape_html(self.title)
             escaped_unquoted = escaped.replace('"', '&quot;')
 
             f.write('---\n')
@@ -1030,7 +1054,7 @@ class GalleryPage(object):
 
             # Include external links to more versions
             f.write(' * Click the [image above](%s) for a larger view\n' %
-                                                self.local_medium_url)
+                    self.local_medium_url)
 
             for key in remote_keys:
                 if 'movie' in key.lower():
@@ -1059,8 +1083,7 @@ class GalleryPage(object):
             # Write caption
             f.write('<h3>Caption:</h3>\n\n')
 
-            text = self.caption_soup.prettify()
-            text = text.encode('ascii', 'xmlcharrefreplace')
+            text = GalleryPage._escape_html(self.caption_soup.prettify())
             for (pattern, repl) in replacements:
                 text = pattern.sub(repl, text)
 
@@ -1072,8 +1095,7 @@ class GalleryPage(object):
 
                 f.write('<h3>Background Info:</h3>\n\n')
 
-                text = self.background_soup.prettify()
-                text = text.encode('ascii', 'xmlcharrefreplace')
+                text = GalleryPage._escape_html(self.background_soup.prettify())
                 for (pattern, repl) in replacements:
                     text = pattern.sub(repl, text)
 
@@ -1150,28 +1172,24 @@ class GalleryPage(object):
             ]
 
             for (name, value) in zip(names, values):
-                if isinstance(value, (str,unicode)):
-                    value = value.encode('ascii', 'xmlcharrefreplace')
+                if isinstance(value, str):
                     f.write("""<tr>
                                  <td style="text-align:right">%s</td>
                                  <td style="text-align:left" colspan="2">%s</td>
                                </tr>
-                            """ % (name,
-                                   value.encode('ascii', 'xmlcharrefreplace'))
+                            """ % (name, GalleryPage._escape_html(value))
                            )
                 else:
-                    val0 = value[0].encode('ascii', 'xmlcharrefreplace')
-                    val1 = value[1].encode('ascii', 'xmlcharrefreplace')
                     f.write("""<tr>
                                  <td style="text-align:right">%s</td>
                                  <td style="text-align:left">%s</td>
                                  <td style="text-align:left">%s</td>
                                </tr>
                             """ % (name,
-                                   val0.encode('ascii', 'xmlcharrefreplace'),
-                                   val1.encode('ascii', 'xmlcharrefreplace'))
+                                   GalleryPage._escape_html(value[0]),
+                                   GalleryPage._escape_html(value[1]))
                            )
-   
+
             f.write('</table>\n')
             f.write('<br>\n')
 
@@ -1214,8 +1232,8 @@ DASH_DATE = ('((' + YEAR + r')-' +
 SLASH_DATE = ('((' + MONTHNO + r')/(' + DATE2 + ')/(' + YEAR + '))')
 
 # A matching string cannot have \w characters immediately before or after
-ANY_DATE = re.compile('(?<!\w)(' + MDY_DATE + '|' + DMY_DATE + '|' +
-                               DASH_DATE + '|' + SLASH_DATE + ')(?!\w)')
+ANY_DATE = re.compile(r'(?<!\w)(' + MDY_DATE + '|' + DMY_DATE + '|' +
+                                   DASH_DATE + '|' + SLASH_DATE + r')(?!\w)')
 
 def find_date_substrings(text):
     """Return a list of all the date-like substrings in the given text."""
