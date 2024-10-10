@@ -655,11 +655,11 @@ REMOVALS = {
     'PIA24948': ('Moon', 'Satellite', 'Earth'),
 }
 
-ASTEROID1 = re.compile('[12]\d\d\d [A-Z][A-Z]?\d*$')
-ASTEROID2 = re.compile('[12]\d\d\d [A-Z][A-Z]?\d* +.*$')
-COMET1 = re.compile('\d+P/[A-Z][A-Za-z0-9 -]+$')
-COMET2 = re.compile('[CP]/[12]\d\d\d [A-Z][A-Z]?\d*$')
-COMET3 = re.compile('[CP]/[12]\d\d\d [A-Z][A-Z]?\d* +\(.*\)$')
+ASTEROID1 = re.compile(r'[12]\d\d\d [A-Z][A-Z]?\d*$')
+ASTEROID2 = re.compile(r'[12]\d\d\d [A-Z][A-Z]?\d* +.*$')
+COMET1 = re.compile(r'\d+P/[A-Z][A-Za-z0-9 -]+$')
+COMET2 = re.compile(r'[CP]/[12]\d\d\d [A-Z][A-Z]?\d*$')
+COMET3 = re.compile(r'[CP]/[12]\d\d\d [A-Z][A-Z]?\d* +\(.*\)$')
 
 def repair_piapage(page):
 
