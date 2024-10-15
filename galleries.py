@@ -575,7 +575,7 @@ def _gallery(fileroot, product_ids, catalog, links,
          ("enceladus.html", "Enceladus", "Enceladus Images")]
 
     If separators = (|",""), linebreaks = 0, and one of the Saturn pages is
-    selected, the index will look like 
+    selected, the index will look like
         [Saturn p.1 p.2 p.3] | Mimas | Enceladus
 
     If Enceladus is selected, the index will look like this:
@@ -692,7 +692,7 @@ def _gallery(fileroot, product_ids, catalog, links,
         with open(filepath, 'w') as f:
 
           # Write header
-          escaped = title.encode('ascii', 'xmlcharrefreplace')
+          escaped = GalleryPage._escape_html(title)
 
           f.write('---\n')
           f.write('layout: base\n')
@@ -824,7 +824,7 @@ def _gallery(fileroot, product_ids, catalog, links,
 
             width = int(max(width + 0.5, 200))
 
-            escaped = title.encode('ascii', 'xmlcharrefreplace')
+            escaped = Gallery._escape_html(title)
             unquoted = escaped.replace('"', '&quot;')
 
             f.write('  <div class="floated_img">\n')

@@ -25,16 +25,16 @@
 # name or abbreviation.
 ################################################################################
 
-from DETECTOR_FULL_NAMES        import DETECTOR_FULL_NAMES
-from HOST_FROM_INSTRUMENT       import HOST_FROM_INSTRUMENT
-from HOST_FULL_NAMES            import HOST_FULL_NAMES
-from HOST_INFO                  import HOST_INFO
-from INSTRUMENT_FROM_DETECTOR   import INSTRUMENT_FROM_DETECTOR
-from INSTRUMENT_FULL_NAMES      import INSTRUMENT_FULL_NAMES
-from MISSION_FULL_NAMES         import MISSION_FULL_NAMES
-from SYSTEM_FROM_TARGET         import SYSTEM_FROM_TARGET
-from TARGET_FULL_NAMES          import TARGET_FULL_NAMES
+from .DETECTOR_FULL_NAMES       import DETECTOR_FULL_NAMES
+from .HOST_FROM_INSTRUMENT      import HOST_FROM_INSTRUMENT
+from .HOST_FULL_NAMES           import HOST_FULL_NAMES
+from .HOST_INFO                 import HOST_INFO
+from .INSTRUMENT_FROM_DETECTOR  import INSTRUMENT_FROM_DETECTOR
+from .INSTRUMENT_FULL_NAMES     import INSTRUMENT_FULL_NAMES
+from .MISSION_FULL_NAMES        import MISSION_FULL_NAMES
+from .SYSTEM_FROM_TARGET        import SYSTEM_FROM_TARGET
+from .TARGET_FULL_NAMES         import TARGET_FULL_NAMES
 
-from KEYWORDS                   import KEYWORDS
+from .KEYWORDS                  import KEYWORDS
 
 ################################################################################

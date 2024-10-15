@@ -21,7 +21,7 @@ import lxml
 import re
 import pickle
 import pycurl
-from StringIO import StringIO
+from io import StringIO
 from PIL import Image
 
 from .BACKGROUND_STRINGS import BACKGROUND_STRINGS
@@ -528,7 +528,8 @@ class PiaPage(GalleryPage):
             try:
                 with open(filepath, 'r') as file:
                     html = file.read()
-                return str(html.encode('ascii', 'xmlcharrefreplace'))
+#                 return str(html.encode('ascii', 'xmlcharrefreplace'))
+                return html
 
             # If local file not found
             except IOError:
@@ -551,10 +552,11 @@ class PiaPage(GalleryPage):
             PiaPage.BACK_TO_HOME_TEXT in req.text):
                 raise IOError('URL not found: "%s"' % url)
 
-        print 'Downloaded ' + url
+        print('Downloaded ' + url)
 
         # Replace non-ASCII characters that normally break HTML
-        cleaned = ''.join(c if ord(c) < 128 else ' ' for c in req.text)
+#         cleaned = ''.join(c if ord(c) < 128 else ' ' for c in req.text)
+        cleaned = req.text
 
         # Save the file so we don't need to retrieve it next time
         filepath = PiaPage.filepath_from_source(source)
@@ -604,7 +606,7 @@ class PiaPage(GalleryPage):
                     raise
 
             if verbose:
-                print 'Thumbnail downloaded for ' + id
+                print('Thumbnail downloaded for ' + id)
 
         path = PiaPage.small_filepath_for_id(id)
         if replace or not os.path.exists(path):
@@ -637,7 +639,7 @@ class PiaPage(GalleryPage):
                     raise
 
             if verbose:
-                print 'Small image downloaded for ' + id
+                print('Small image downloaded for ' + id)
 
         path = PiaPage.medium_filepath_for_id(id)
         if replace or not os.path.exists(path):
@@ -670,7 +672,7 @@ class PiaPage(GalleryPage):
                     raise
 
             if verbose:
-                print 'Medium image downloaded for ' + id
+                print('Medium image downloaded for ' + id)
 
     ############################################################################
     # Utilities
@@ -777,7 +779,7 @@ class PiaPage(GalleryPage):
         # Get the caption as soup
         paragraphs_in_soup = list(self.soup.find('dd').children)
 
-        # Convert to strings and strip out empty strings 
+        # Convert to strings and strip out empty strings
         paragraphs = [GalleryPage.soup_as_text(s) for s in paragraphs_in_soup]
 
         filtered_paragraphs_in_soup = []
@@ -922,7 +924,7 @@ class PiaPage(GalleryPage):
                                 neighbors=neighbors)
 
             if verbose:
-                print 'Jekyll file written: ' + path
+                print('Jekyll file written: ' + path)
 
 ################################################################################
 # Catalog support functions
@@ -952,13 +954,13 @@ def build_catalog(incremental=True, verbose=True, download=False, path=None,
                 piapages = pickle.load(f)
 
             if verbose:
-                print 'catalog loaded'
+                print('catalog loaded')
 
             updating = True
         except:
             piapages = {}
             if verbose:
-                print 'starting new catalog'
+                print('starting new catalog')
 
             updating = False
     else:
@@ -976,10 +978,10 @@ def build_catalog(incremental=True, verbose=True, download=False, path=None,
 
         # If not updating, print every 100th number
         if more_verbose:
-            print pia
+            print(pia)
         elif verbose and not updating:
             if pia % 100 == 0:
-                print pia   # Otherwise, print every 100th
+                print(pia)   # Otherwise, print(every 100th
 
         # Try to read the PiaPage
         try:
@@ -989,7 +991,7 @@ def build_catalog(incremental=True, verbose=True, download=False, path=None,
         except IOError:
             continue
         except ValueError as e:
-            print '**** Error in PIA%05d' % pia, e
+            print('**** Error in PIA%05d' % pia, e)
             continue
 
         # Always skip non-planetary
@@ -997,7 +999,7 @@ def build_catalog(incremental=True, verbose=True, download=False, path=None,
             continue
 
         if verbose and updating:
-            print pia       # If updating, print every new ID
+            print(pia)     # If updating, print every new ID
 
         piapages[p.id] = p
 
