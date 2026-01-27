@@ -6,6 +6,11 @@
 ################################################################################
 
 import os
+import yaml
+import itertools
+import inspect
+import dicts                # used by "inspect.getfile" below
+import urllib.request
 from gallerypage import GalleryPage
 
 MONTH_NAMES = ['', 'January', 'February', 'March', 'April', 'May', 'June',
@@ -19,7 +24,32 @@ QUARTER_NAMES = ['', 'January-March',    '', '',
 QUARTER_ABBREVS = ['', 'Jan-Mar', '', '', 'Apr-Jun', '', '',
                        'Jul-Sep', '', '', 'Oct-Dec', '', '']
 
+GALLERIES_SUBDIR_      = 'galleries/'
+# Define the absolute path to the local Jekyll directory
+JEKYLL_ROOT_ = inspect.getfile(dicts).rpartition('dicts/')[0] + 'jekyll/'
+PHOTOJOURNAL_URL_      = 'https://photojournal.jpl.nasa.gov/catalog/'
+
 ################################################################################
+
+def get_final_NASA_url(url):
+    """ Since NASA is now redirecting all the original photojournal links, 
+        this will (hopefully) get the redirected links for the updated galleries
+        
+    Input:
+        url     Original photojournal URL w/PIA embedded, example:
+                https://photojournal.jpl.nasa.gov/catalog/PIA24615
+    """
+    try:
+        opener = urllib.request.build_opener()
+        request = urllib.request.Request(url)
+        with opener.open(request) as response:
+            ret = response.geturl() # geturl() returns the final URL after redirects
+            print(f'orig url: {url}, response: {ret}')
+            return ret
+    except urllib.error.URLError as e:
+        # for the moment, just return the original PIA url if the redirect check fails
+        return f"Error: {e.reason}"
+        #return url
 
 def by_release_date(catalog, fileroot, url_prefix, title_prefix,
                     merge_limit=240, merge_early=True, merge_late=True):
@@ -74,7 +104,7 @@ def by_release_date(catalog, fileroot, url_prefix, title_prefix,
 
     # Sort chronologically
     tuples = []
-    for (product_id, page) in catalog.iteritems():
+    for (product_id, page) in catalog.items():
         tuples.append((page.release_date, product_id))
 
     # Group by month
@@ -86,7 +116,7 @@ def by_release_date(catalog, fileroot, url_prefix, title_prefix,
 
         by_month[key].append(product_id)
 
-    yyyy_mm = by_month.keys()
+    yyyy_mm = list(by_month.keys())
     yyyy_mm.sort()
 
     first_year = yyyy_mm[0][:4]
@@ -149,7 +179,7 @@ def by_release_date(catalog, fileroot, url_prefix, title_prefix,
     years_unmerged = []
 
     if grouping != 'all':
-        year_keys = by_year.keys()
+        year_keys = list(by_year.keys())
         year_keys.sort()
 
         if grouping == 'year':
@@ -174,7 +204,7 @@ def by_release_date(catalog, fileroot, url_prefix, title_prefix,
                 for key in keys_to_delete:
                     del by_date[key]
 
-        keys = by_date.keys()
+        keys = list(by_date.keys())
         keys.sort()
 
     # Merge multiple early years if possible
@@ -254,7 +284,7 @@ def by_release_date(catalog, fileroot, url_prefix, title_prefix,
             late_year = y1
 
     # Re-sort the keys
-    keys = by_date.keys()
+    keys = list(by_date.keys())
     keys.sort()
 
     # Create product_ids and links
@@ -332,8 +362,7 @@ def by_release_date(catalog, fileroot, url_prefix, title_prefix,
         else:
             links.append(info[1:])
 
-    _gallery(fileroot, product_ids, catalog, links,
-             separators=('|','|'), linebreaks=2)
+    _gallery(fileroot, product_ids, catalog, links)
 
 ################################################################################
 ################################################################################
@@ -391,7 +420,7 @@ def by_target(catalog, fileroot, url_prefix, title_prefix, targets,
 
     # Organize by target or system
     info = {}
-    for (key, page) in catalog.iteritems():
+    for (key, page) in catalog.items():
 
         if target_types:
             names = page.target_types
@@ -463,16 +492,19 @@ def by_target(catalog, fileroot, url_prefix, title_prefix, targets,
             links[-1].append((filename, _label(target, pages, pages),
                                         _title(target, pages, pages)))
             product_ids[filename] = ids
+        
+    _gallery(fileroot, product_ids, catalog, links)
+    
+class FixIndent(yaml.Dumper):
 
-    _gallery(fileroot, product_ids, catalog, links,
-             separators=('|',''), linebreaks=0)
+    def increase_indent(self, flow=False, indentless=False):
+        return super(FixIndent, self).increase_indent(flow, False)    
 
 ################################################################################
 # Internal function to write a full set of browse pages
 ################################################################################
 
-def _gallery(fileroot, product_ids, catalog, links,
-             separators=('|','|'), linebreaks=True, bottom_nav=20):
+def _gallery(fileroot, product_ids, catalog, links):
     """Write a a complete set of Jekyll gallery pages of thumbnails with links
     between one another and to the image pages.
 
@@ -484,14 +516,6 @@ def _gallery(fileroot, product_ids, catalog, links,
                         associated GalleryPage object.
         links           a list structure defining the labels, titles and html
                         filenames for a thumbnail gallery. See details below.
-        separators      a string or a tuple of two strings indicating the
-                        separator character between hyperlinks in lists and
-                        sublists.
-        linebreaks      number of adjacent sublists to show, separated by line
-                        breaks
-        bottom_nav      number of items in the page before it adds prev/next
-                        navigation to the bottom of the page. True for always;
-                        False for never.
 
     The basic element in the links structure is a tuple
         (filename, label, title)
@@ -512,376 +536,177 @@ def _gallery(fileroot, product_ids, catalog, links,
 
     The first tuple in a sublist has an extra element as shown:
         (filename, label_if_closed, label_if_open, title)
-    Here label_if_closed is the text of the hyperlink to use if the sublist is
-    closed, and label_if_open is the text to use if the sublist is open.
-
-    "separators" is a single string or a tuple of two strings. The first string
-    appears between hyperlinks in the index. Vertical bar "|" is the default.
-    The second string, if present, appears between hyperlinks in a sublist.
-
-    If "linebreaks" is 1, then an open sublist is surrounded by line breaks. If
-    2 or more, then adjacent sublists are also open and surrounded by line
-    breaks. If 0, then open sublists are not surrounded by line breaks.
-
-    Example 1:
-        [("images_2007.html", "2007", "Images from 2007"),
-         ("images_2008.html", "2008", "Images from 2008"),
-         ("images_2009.html", "2009", "Images from 2009")]
-    If separators = "|", then the page index will look like this:
-        2007 | 2008 | 2009
-
-    Example 2:
-        [("images_2007.html", "2007", "Images from 2007"),
-         [("images_2008_01.html", "2008", "2008 Jan-Mar", "Images 2008-Q1"),
-          ("images_2008_04.html",              "Apr-Jun", "Images 2008-Q2"),
-          ("images_2008_07.html",              "Jul-Aug", "Images 2008-Q3"),
-          ("images_2008_10.html",              "Sep-Dec", "Images 2008-Q4")],
-         [("images_2009_01.html", "2009", "2009 Jan-Mar", "Images 2009-Q1"),
-          ("images_2009_04.html",              "Apr-Jun", "Images 2009-Q2"),
-          ("images_2009_07.html",              "Jul-Aug", "Images 2009-Q3"),
-          ("images_2009_10.html",              "Sep-Dec", "Images 2009-Q4")],
-         [("images_2010_01.html", "2010", "2010 Jan-Mar", "Images 2010-Q1"),
-          ("images_2010_04.html",              "Apr-Jun", "Images 2010-Q2"),
-          ("images_2010_07.html",              "Jul-Aug", "Images 2010-Q3"),
-          ("images_2010_10.html",              "Sep-Dec", "Images 2010-Q4")],
-        ("images_2011.html", "2011", "Images from 2011"),
-        ("images_2012.html", "2012", "Images from 2012")]
-
-    If separators = ("|","|") and the first item is selected, the page index
-    will look like this:
-        2007 | 2008 | 2009 | 2010 | 2011 | 2012
-
-    If 2008 or any item in its sublist is selected, separators = ("|","") and
-    linebreaks = 0, the page index will look like this:
-      2007 | [2008 Jan-Mar Apr-Jun Jul-Aug Sep-Dec] | 2009 | 2010 | 2011 | 2012
-
-    Same as above, but linebreaks = 1:
-        2007 |
-        [2008 Jan-Mar Apr-Jun Jul-Aug Sep-Dec] |
-        2009 | 2010 | 2011 | 2012
-
-    Same as above, but linebreaks = 2:
-        2007 |
-        [2008 Jan-Mar Apr-Jun Jul-Aug Sep-Dec] |
-        [2009 Jan-Mar Apr-Jun Jul-Aug Sep-Dec] |
-        2010 | 2011 | 2012
-
-    Example 3:
-        [[("saturn.html", "Saturn", "Saturn p.1", "Saturn Images (p.1)"),
-          ("saturn_p2.html",               "p.2", "Saturn images (p.2)"),
-          ("saturn_p3.html",               "p.3", "Saturn images (p.3)"),
-         [("mimas.html", Mimas", "Mimas p.1", "Mimas Images (p.1)"),
-          ("mimas_p2.html",            "p.2", "Mimas images (p.2)", )],
-         ("enceladus.html", "Enceladus", "Enceladus Images")]
-
-    If separators = (|",""), linebreaks = 0, and one of the Saturn pages is
-    selected, the index will look like 
-        [Saturn p.1 p.2 p.3] | Mimas | Enceladus
-
-    If Enceladus is selected, the index will look like this:
-        Saturn | Mimas | Enceladus
+ 
     """
+    #####
+    # SET THIS TO FALSE FOR DEBUGGING BECAUSE TRUE IS *VERY* TIMECONSUMING
+    get_referring_url = False
+    #####
+    # print(f'links: {links}')
 
-    # Replace each element that is not a sublist by a one-element sublist
-    links = list(links)
-    for k in range(len(links)):
-        if isinstance(links[k], tuple):
-            links[k] = [links[k]]
+    def create_yaml_header(title):
+        data = {}
+        data['layout'] = 'base'
+        data['layout_style'] = 'wide'
+        data['title'] = title.encode('ascii', 'xmlcharrefreplace').decode('ascii')
 
-    for sublist in links:
-        for k in range(len(sublist)):
-            if len(sublist[k]) == 3:
-               sublist[k] = (sublist[k][0], sublist[k][1], sublist[k][1],
-                                                           sublist[k][2])
+        return data
+    
+    def create_previous_next_menu(isSublist, previous_link):
+        page_menu_data = {}
 
-    # Make sure we have two separator strings
-    if isinstance(separators, str):
-        separators = [separators, '']
-    elif len(separators) == 1:
-        separators = [separators[0], '']
+        if url != all_links[0][0]:
+            page_menu_data['first_link'] = all_links[0][0]
 
-    if separators[1]:
-        spacer = ' '
-    else:
-        spacer = ''
+        if url != all_links[-1][0]:
+            page_menu_data['last_link'] = all_links[-1][0]
 
-    separators = list(separators)
-    if separators[1].strip() == '':
-        separators[1] = '&thinsp;'
+        # handle the sublist next/previous differently
+        if isSublist:
+            if subindex + 1 < len(item):
+                page_menu_data['next_link'] = item[subindex + 1][0]
 
-    # Create the parent directories if necessary
-    try:
-        os.makedirs(fileroot)
-    except OSError:
-        pass
+            elif index + 1 < len(main_links):
+                page_menu_data['next_link'] = main_links[index + 1][0]
 
-    #### Walk through the pages of the gallery indexed [j]
-
-    nlinks = len(links)
-    for j in range(nlinks):
-      sublist_is_open  = nlinks * [False]
-      linebreak_before = (nlinks+1) * [False]
-
-      sublist = links[j]
-      nsublinks = len(sublist)
-
-      # Decide which sublists are open
-      if nsublinks > 1:
-          sublist_is_open[j] = True
-          if linebreaks:
-              linebreak_before[j] = True
-              linebreak_before[j+1] = True
-
-          if linebreaks > 1:
-              if j > 0 and len(links[j-1]) > 1:
-                  sublist_is_open[j-1] = True
-                  linebreak_before[j-1] = True
-              if j < nlinks-1 and len(links[j+1]) > 1:
-                  sublist_is_open[j+1] = True
-                  linebreak_before[j+2] = True
-
-      linebreak_before[0] = False         # No line break before first
-      linebreak_before[-1] = False        # No line break after last
-
-      # Walk through sublist items indexed [k]
-
-      nsubs = len(sublist)
-      for k in range(nsubs):
-        neighbors = 4 * [None]
-
-        # Locate target of "<<"
-        if k > 0:
-            neighbors[0] = sublist[0]
         else:
-            neighbors[0] = links[0][0]
+            if index + 1 < len(main_links):
+                page_menu_data['next_link'] = main_links[index + 1][0]
 
-        if (j,k) == (0,0):
-            neighbors[0] = None
+        if previous_link is not None:
+            page_menu_data['previous_link'] = previous_link
 
-        # Locate target of "<"
-        if k > 0:
-            neighbors[1] = sublist[k-1]
-        elif j == 0:
-            neighbors[1] = None
-        elif sublist_is_open[j-1]:
-            neighbors[1] = links[j-1][-1]
-        else:
-            neighbors[1] = links[j-1][0]
+        return page_menu_data
 
-        # Locate target of ">"
-        if k < nsubs - 1:
-            neighbors[2] = sublist[k+1]
-        elif j == nlinks - 1:
-            neighbors[2] = None
-        else:
-            neighbors[2] = links[j+1][0]
+        
+    def create_menu_item(title, url, alt):
+        return {
+            'menu_item': {
+                'title': title,
+                'url': url,
+                'alt': alt
+            }
+        }
+    
+    def create_jump_to_links(link_list, sublist = None):
+        jump_to_links = []
 
-        # Locate target of ">>"
-        if k < nsubs - 1:
-            neighbors[3] = sublist[-1]
-        elif j == nlinks - 1:
-            neighbors[3] = None
-        elif sublist_is_open[-1]:
-            neighbors[3] = links[-1][-1]
-        else:
-            neighbors[3] = links[-1][0]
+        for element in link_list:
+            if isinstance(element, tuple):
+                if len(element) > 3:
+                    (url, title, _, alt) = element
+                else:
+                    (url, title, alt) = element
+                    
+                jump_to_links.append(create_menu_item(title, url, alt))
 
-        # Write the Jekyll file
-        (filename, _, _, title) = sublist[k]
+            else:
+                if sublist == element:
+                    for subelement in sublist:
+                        if len(subelement) > 3:
+                            (url, _, title, alt) = subelement
+                        else:
+                            (url, title, alt) = subelement
+                            
+                        jump_to_links.append(create_menu_item(title, url, alt))
+                else:
+                    subelement = element[0]
+                    if len(subelement) > 3:
+                        (url, title, _, alt) = subelement
+                    else:
+                        (url, title, alt) = subelement
+                        
+                    jump_to_links.append(create_menu_item(title, url, alt))
+
+ 
+        return jump_to_links
+    
+    def create_floated_img_blocks(filename):
+        floated_img_blocks = []
+        for id in product_ids[filename]:
+            title = catalog[id].title.encode('ascii', 'xmlcharrefreplace').decode('ascii')
+            alt = id + ':' + title.replace('"', '&quot;')
+            href = PHOTOJOURNAL_URL_ + id
+            if get_referring_url is True:
+                href = get_final_NASA_url(href)
+             
+            row_data = {
+                'row': '',
+                'href': href,
+                'src': catalog[id].local_thumbnail_url,
+                'alt': alt,
+                'title': title
+            }
+            if catalog[id].is_movie:
+                row_data['movie'] = True
+
+            row_data = {k: v for k, v in row_data.items() if v is not None}
+            floated_img_blocks.append({k: v for k, v in row_data.items() if v is not None}) 
+
+        return floated_img_blocks
+
+    def write_yaml_file(filename, yaml_data):
+        yaml_output = yaml.dump(yaml_data, Dumper=FixIndent, default_flow_style=False, sort_keys=False)
+
+        # Adding '---' at the beginning and end of the YAML
+        yaml_output = f"---\n{yaml_output}---\n"
+        yaml_output += "\n# {{ page.title }}\n\n---\n\n{% include gallery.html %}\n"
+        
+        # Write YAML data to file
         filepath = os.path.join(fileroot, filename)
         with open(filepath, 'w') as f:
+            f.write(yaml_output)
+   
+    # flatten the array of arrays to make it easier to create the next and previous links
+    all_links = list(itertools.chain.from_iterable(
+        item if isinstance(item, list) else [item] for item in links
+    ))
 
-          # Write header
-          escaped = title.encode('ascii', 'xmlcharrefreplace')
+    main_links = []
+    for element in links:
+        if isinstance(element, tuple):
+            main_links.append(element)
+        elif isinstance(element, list):
+            main_links.append(element[0])
+   
+    previous_link = None
+    for index, item in enumerate(links):
+        if isinstance(item, tuple):
+            (url, title, alt,) = item
 
-          f.write('---\n')
-          f.write('layout: base\n')
-          f.write('layout_style: wide\n')
-          f.write('format: html\n')
-          f.write('title: "%s"\n' % escaped.replace('"',"'"))
-          f.write('---\n\n')
+            yaml_data = create_yaml_header(alt)
 
-          f.write('<style>\n')
-          f.write('.floated_img\n')
-          f.write('{\n')
-          f.write('    float: left;\n')
-          f.write('    padding: 3px;\n')
-          f.write('}\n')
-          f.write('.floated_img table {\n')
-          f.write('    width: 200px;\n')
-          f.write('    border: 1px solid lightgrey;\n')
-          f.write('    border-collapse: collapse;\n')
-          f.write('}\n')
-          f.write('td.thumbnail {\n')
-          f.write('    vertical-align: bottom;\n')
-          f.write('    height: 100px;\n')
-          f.write('    text-align: center;\n')
-          f.write('    margin-left: auto;\n')
-          f.write('    margin-right: auto;\n')
-          f.write('    border: none;\n')
-          f.write('}\n')
-          f.write('td.caption {\n')
-          f.write('    vertical-align: top;\n')
-          f.write('    text-align: center;\n')
-          f.write('    height: 66px;\n')
-          f.write('    font-size: 10pt;\n')
-          f.write('    max-height: 66px;\n')
-          f.write('    word-wrap: break-word;\n')
-          f.write('    overflow: hidden;\n')
-          f.write('    text-overflow: ellipsis;\n')
-          f.write('    display: -webkit-box;\n')
-          f.write('    border: none;\n')
-          f.write('    -webkit-line-clamp: 3;\n')
-          f.write('    -webkit-box-orient: vertical;\n')
-          f.write('}\n')
-          f.write('</style>\n\n')
+            # don't create addition menus when it is a flat structure
+            if len(all_links) > 1:
+                yaml_data['page_menu'] = create_previous_next_menu(False, previous_link)
+                previous_link = url
+ 
+                # jump to navigation
+                yaml_data['jump_to'] = create_jump_to_links(links)
 
-          f.write('<h1>%s</h1>\n\n' % escaped)
-          f.write('<hr/>\n')
+            # image blocks
+            yaml_data['image_table'] = create_floated_img_blocks(url)
 
-          # Write first/prev/next/last navigation
-          if nlinks > 1:
-            f.write('<div>\n<p style="text-align:center;">\n')
-
-            if neighbors[0] is None:
-                f.write('&lt;&lt; first |\n')
-            else:
-                f.write('<a href="%s">&lt;&lt; first</a> |\n' % neighbors[0][0])
-
-            if neighbors[1] is None:
-                f.write('&lt; previous |\n')
-            else:
-                f.write('<a href="%s">&lt; previous</a> |\n' % neighbors[1][0])
-
-            if neighbors[2] is None:
-                f.write('next &gt; |\n')
-            else:
-                f.write('<a href="%s">next &gt;</a> |\n' % neighbors[2][0])
-
-            if neighbors[3] is None:
-                f.write('last &gt;&gt;\n')
-            else:
-                f.write('<a href="%s">last &gt;&gt;</a>\n' % neighbors[3][0])
-
-            f.write('</p>\n\n')
-
-            # Write complete navigation
-            f.write('<p><b>Jump to</b>:<br/>\n')
-
-            for jj in range(nlinks):
-              if jj != 0:
-                f.write(separators[0] + ' ')
-
-              if linebreak_before[jj]:
-                f.write('<br/>')
-
-              if sublist_is_open[jj]:
-                (url, _, label_if_open, _) = links[jj][0]
-                if filename == url:
-                  f.write('[%s<b>%s</b>\n' % (spacer, label_if_open))
+            write_yaml_file(url, yaml_data)
+   
+        else:
+            for subindex, subitem in enumerate(item):
+                if len(subitem) > 3:
+                    (url, title, subtitle, alt,) = subitem
                 else:
-                  f.write('[%s<a href="%s">%s</a>\n' % (spacer, url,
-                                                        label_if_open))
+                    (url, _, alt,) = subitem
 
-                for kk in range(1, len(links[jj])-1):
-                  (url, _, label_if_open, _) = links[jj][kk]
-                  if filename == url:
-                    f.write('%s <b>%s</b>\n' % (separators[1], label_if_open))
-                  else:
-                    f.write('%s <a href="%s">%s</a>\n' % (separators[1], url,
-                                                          label_if_open))
+                yaml_data = create_yaml_header(alt)
+                
+                yaml_data['page_menu'] = create_previous_next_menu(True, previous_link)
+                previous_link = url
 
-                (url, _, label_if_open, _) = links[jj][-1]
-                if filename == url:
-                  f.write('%s <b>%s</b>%s]\n' % (separators[1], label_if_open,
-                                                 spacer))
-                else:
-                  f.write('%s <a href="%s">%s</a>%s]\n' % (separators[1], url,
-                                                         label_if_open, spacer))
+                # jump to navigation
+                yaml_data['jump_to'] = create_jump_to_links(links, sublist = item)
 
-              else:
-                (url, label_if_closed, _, _) = links[jj][0]
-                if filename == url:
-                  f.write('<b>%s</b>\n' % label_if_closed)
-                else:
-                  f.write('<a href="%s">%s</a>\n' % (url, label_if_closed))
+                # image blocks
+                yaml_data['image_table'] = create_floated_img_blocks(url)
 
-            f.write('</p></div>\n')
-
-          # Write the thumbnails
-          f.write('<div align="left">\n')
-          for id in product_ids[filename]:
-            title = catalog[id].title
-            is_movie = catalog[id].is_movie
-            if catalog[id].thumbnail_shape:
-                (w,h) = catalog[id].thumbnail_shape
-                width = int(100. * w/float(h) + 0.9999999)
-            elif catalog[id].shape:
-                (w,h) = catalog[id].shape
-                width = int(100. * w/float(h) + 0.9999999)
-            else:
-                width = 100.
-
-            width = int(max(width + 0.5, 200))
-
-            escaped = title.encode('ascii', 'xmlcharrefreplace')
-            unquoted = escaped.replace('"', '&quot;')
-
-            f.write('  <div class="floated_img">\n')
-            f.write('    <table width="%d">\n' % width)
-            f.write('      <tr>\n')
-            f.write('        <td class="thumbnail">\n')
-            f.write('          <a href="%s">\n' %
-                                 catalog[id].local_page_url)
-            f.write('            <img src="%s"\n' %
-                                 catalog[id].local_thumbnail_url)
-            f.write('                 alt="%s: %s"\n' % (id, unquoted))
-            f.write('                 height="100">\n')
-            f.write('          </a>\n')
-            f.write('        </td>\n')
-            f.write('      </tr>\n')
-            f.write('      <tr>\n')
-            f.write('        <td class="caption">\n')
-
-            if is_movie:
-                f.write('          <img src="/icons-local/movie_icon.png"\n')
-                f.write('               alt="Movie icon">\n')
-
-            f.write('          <a href="%s">\n' %
-                                catalog[id].local_page_url)
-            f.write('              %s\n' % escaped)
-            f.write('          </a>\n')
-            f.write('        </td>\n')
-            f.write('      </tr>\n')
-            f.write('    </table>\n')
-            f.write('  </div>\n\n')
-
-          f.write('</div>\n\n')
-
-          # Repeat first/prev/next/last navigation
-          if nlinks > 1 and (bottom_nav is True or len(product_ids[filename]) >= bottom_nav):
-            f.write('<div><br clear="all" /><br/><p style="text-align:center;">\n')
-
-            if neighbors[0] is None:
-                f.write('&lt;&lt; first |\n')
-            else:
-                f.write('<a href="%s">&lt;&lt; first</a> |\n' % neighbors[0][0])
-
-            if neighbors[1] is None:
-                f.write('&lt; previous |\n')
-            else:
-                f.write('<a href="%s">&lt; previous</a> |\n' % neighbors[1][0])
-
-            if neighbors[2] is None:
-                f.write('next &gt; |\n')
-            else:
-                f.write('<a href="%s">next &gt;</a> |\n' % neighbors[2][0])
-
-            if neighbors[3] is None:
-                f.write('last &gt;&gt;\n')
-            else:
-                f.write('<a href="%s">last &gt;&gt;</a>\n' % neighbors[3][0])
-
-            f.write('</p><br/></div>\n\n')
-
+                write_yaml_file(url, yaml_data)
+            
 ################################################################################

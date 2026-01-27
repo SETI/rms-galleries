@@ -1,10 +1,16 @@
 # rms-galleries
 
+## Installation
+
+- Install python3
+- Create a virtual environment: python -m venv venv
+- source venv\Scripts\activate
+- cd to galleries directory
+- Make sure packages are available: pip install -r requirements.txt
+
 ## Quick notes from Mark 1/30/2022
 
 * This is the version used to create the current galleries.
-
-* Everything is still in Python 2, although a conversion to 3 would probably be straightforward.
 
 * The highest-numbered press release checked is PIA25121.
 
@@ -19,7 +25,10 @@
       ``missions``, ``hosts``, ``keywords``, ``caption_html``, etc.
     - There should be a single __GalleryPage__ object associated with each HTML page
       online in the ``press_releases/pages`` subdirectory.
-- Subclass __PiaPage__ handles Photojournal gallery pages at ``https://photojournal.jpl.nasa.gov/``.
+- Subclass __PiaPage__ handles Photojournal gallery pages that used to live at ``https://photojournal.jpl.nasa.gov/``,
+      but now exist in a diff form at ``https://photojournal.jpl.nasa.gov/catalog/``
+    - Note that the new gallery pages from NASA have a completely different design which unfortunately obseletes 
+       the bulk of the gallery page code.
     - This class is defined in ``piapage/__init__.py``. Use "``import piapage``".
     - Various other files in the ``piapage`` directory support this class.
 - Subclass __HubblePage__ handles planetary web pages at ``https://hubblesite.org/``.
@@ -119,7 +128,7 @@ of Technology in Pasadena, manages the mission....
 4. Right now, we are only tracking Photojournal pages up to 25999. If we have started to
    see pages above 25900 or so, edit ``piapage/MAX_PIAPAGE.py`` to specify a higher limit.
 5. ``cd`` to the ``rms-galleries`` repo directory.
-6. In an ipython2 session...
+6. In an python session...
 
         import piapage
 
@@ -144,7 +153,7 @@ At this point,
 
 9. To generate the new galleries, run this program at the command line (not inside ipython):
 
-        python2 piapage/piapage_galleries.py
+        python piapage/piapage_galleries.py
 
 At this point, the Jekyll galleries have been written to the ``jekyll/galleries``
 subdirectory of this repo.

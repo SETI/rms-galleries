@@ -1,0 +1,10 @@
+numpy
+pyparsing
+pycurl
+bs4
+lxml
+pillow
+PyYAML
+rms-filecache
+rms-textkernel
+rms-julian

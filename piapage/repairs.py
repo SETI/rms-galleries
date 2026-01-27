@@ -8,21 +8,22 @@ def repair_tables(missions, hosts, instruments, targets, systems):
 
     #### Always ensure that each list has at least one element, possibly blank
 
-    if 'Sol' in systems[0]:
-        systems[0] = ''
+    if 'Sol' in systems or 'Sun' in systems:
+        systems = ''
 
-    if 'Unknown' in systems[0]:
-        systems[0] = ''
+    if 'Unknown' in systems:
+        systems = ''
 
-    if 'Sol' in targets[0]:
-        targets[0] = 'Sun'
-        systems[0] = 'Sun'
+    if 'Sol' in targets:
+        targets = 'Sun'
+        systems = 'Sun'
 
     if 'Rosetta' in missions:
-        if targets[0] == 'Comet':
-            targets[0] = '67P/Churyumov-Gerasimenko'
+        if targets == 'Comet':
+            targets = '67P/Churyumov-Gerasimenko'
 
-    if missions[0] == 'Magellan' and len(hosts) > 1:
+    #if missions[0] == 'Magellan' and len(hosts) > 1:
+    if missions == 'Magellan' and len(hosts) > 1:
         if 'Magellan' in hosts[1:]:
             hosts.remove('Magellan')
             hosts = ['Magellan'] + hosts
@@ -31,7 +32,8 @@ def repair_tables(missions, hosts, instruments, targets, systems):
             if 'Arecibo' in instruments[0]:
                 instruments = instruments[1:] + [instruments[0]]
 
-    if missions[0] == 'Magellan' and 'Radar System' in instruments:
+    #if missions[0] == 'Magellan' and 'Radar System' in instruments:
+    if missions == 'Magellan' and 'Radar System' in instruments:
         k = instruments.index('Radar System')
         instruments[k] = 'Imaging Radar'
 
