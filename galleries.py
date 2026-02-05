@@ -11,7 +11,6 @@ import itertools
 import inspect
 import dicts                # used by "inspect.getfile" below
 import urllib.request
-from gallerypage import GalleryPage
 
 MONTH_NAMES = ['', 'January', 'February', 'March', 'April', 'May', 'June',
                'July', 'August', 'September', 'October', 'November', 'December']
@@ -47,9 +46,8 @@ def get_final_NASA_url(url):
             print(f'orig url: {url}, response: {ret}')
             return ret
     except urllib.error.URLError as e:
-        # for the moment, just return the original PIA url if the redirect check fails
-        return f"Error: {e.reason}"
-        #return url
+        # fall back to the original URL so generated hrefs stay valid
+        return url
 
 def by_release_date(catalog, fileroot, url_prefix, title_prefix,
                     merge_limit=240, merge_early=True, merge_late=True):
