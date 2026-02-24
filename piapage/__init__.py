@@ -39,6 +39,7 @@ PIA_REGEX = re.compile(r'PIA[0-9]{5}')
 YMD_REGEX = re.compile(r'[12][0-9]{3}-[01][0-9]-[0-3][0-9]$')
 
 PHOTOJOURNAL_URL = '//photojournal.jpl.nasa.gov/catalog/'
+PDS_PHOTOJOURNAL_URL = '//pds-rings.seti.org/press_releases/pages/'
 
 # Any mission that starts with one of these is definitely planetary
 MISSIONS_ALWAYS_INCLUDED = set([
@@ -116,7 +117,7 @@ class PiaPage(GalleryPage):
                         planetary; None or False to skip the downloading of
                         images. A warning is raised if one or more of the images
                         cannot be downloaded.
- 
+
             jekyll      'all' to create a Jekyll source file for every page;
                         'planetary' to create one for planetary images only;
                         'new-all' to create a Jekyll page only if it does not
@@ -176,7 +177,8 @@ class PiaPage(GalleryPage):
             if piatext == self.soup.id:
                 print(f'id: {id}')
 
-        '''self.article_soup = self.soup.find('article')
+        """ This code is currently underconstruction for the individual PIA pages
+        self.article_soup = self.soup.find('article')
         self.section_soup = self.article_soup.find('section')
 
         # Validate the PIA page
@@ -371,7 +373,7 @@ class PiaPage(GalleryPage):
             im.close()
         else:
             self.thumbnail_shape = None
-'''
+    """
     ############################################################################
     # Procedures to locate URLs and files
     ############################################################################
@@ -718,13 +720,13 @@ class PiaPage(GalleryPage):
         credit_header = self.section_soup.find('span', text="Credits: ")
         if credit_header is not None:
             credits = credit_header.find_next_sibling()
-            
+
         return GalleryPage.soup_as_text(credits)
 
     def get_release_date(self):
         """Return the release date in yyyy-mm-dd format."""
 
-        date = ''     
+        date = ''
         time_element = self.section_soup.find('time')
         if time_element:
             date = time_element['datatime']
@@ -743,8 +745,7 @@ class PiaPage(GalleryPage):
         return 'movie' in test.text
 
     def get_is_color(self):
-        """Return True if this is in color; False if it is a grayscale or
-        unknown."""
+        """Return True if this is in color; False if it is a grayscale or unknown."""
 
         ipia = int(self.id[3:])
         try:
@@ -753,8 +754,7 @@ class PiaPage(GalleryPage):
             return False
 
     def get_is_grayscale(self):
-        """Return True if this is black and white; False if it is a in color or
-        unknown."""
+        """Return True if this is black and white; False if it is a in color or unknown."""
 
         ipia = int(self.id[3:])
         try:
@@ -763,11 +763,10 @@ class PiaPage(GalleryPage):
             return False
 
     def description_and_background(self):
-        """Return the description and any identified background information as two
-        soups."""
+        """Return the description and any identified background information as two soups."""
 
         # Get the caption as soup
-        
+
         header_element = self.section_soup.find('h2', string="Description")
 
         caption_as_soup = BeautifulSoup('', PARSER)
@@ -778,13 +777,14 @@ class PiaPage(GalleryPage):
         while current_node is not None:
             if isinstance(current_node, (Tag, NavigableString)):
                 caption_as_soup.append(current_node)
-                
-            current_node = current_node.next_sibling       
+
+            current_node = current_node.next_sibling
 
         background_indices = []
 
        # Test the last eight paragraphs for background info
-        """for k in range(1,len(filtered_paragraphs)):
+        """ this code is currently under construction for individual PIA pages
+        for k in range(1,len(filtered_paragraphs)):
 
             # Stop each paragraph search if any background substring is found
             for test_str in BACKGROUND_STRINGS:
@@ -807,7 +807,8 @@ class PiaPage(GalleryPage):
             else:
 #                 if background_found:
 #                     print('WARNING, interleaved caption: ' + str(k) + ' ' + str(self.id))
-                caption_as_soup.append(filtered_paragraphs_in_soup[k])"""
+                caption_as_soup.append(filtered_paragraphs_in_soup[k])
+        """
 
         return (caption_as_soup, background_as_soup)
 
@@ -822,17 +823,17 @@ class PiaPage(GalleryPage):
         for row in rows:
             soup_value = row.find_all('ul')
             columns = row.find_all('li')
-            
+
             pair = []
             for column in columns:
                 contents = column.find('a')
                 if contents is not None:
-                    text = contents.text                    
+                    text = contents.text
                 else:
                     text = column.text
 
                 # Clean up Unicode
-                text = str(''.join([c if ord(c) < 128 else ' ' for c in text]))
+                text = str(''.join([c if c.isascii() else ' ' for c in text]))
                 text = text.strip()
 
                 text = text.replace('\r', '\n')
@@ -852,7 +853,7 @@ class PiaPage(GalleryPage):
 
                 pair.append(new_items)
 
-            heading_element = row.find('span')            
+            heading_element = row.find('span')
             key = heading_element.get_text().replace(':','').replace('(s)','')
             if pair[0]:
                 table[key] = pair[0]
@@ -880,7 +881,7 @@ class PiaPage(GalleryPage):
     def jekyll_filepath_for_id(id):
 
         id = PiaPage.get_id(id)
-        # TEMP ONLY FOR TESTING, DELETE BEFORE CHECKIN
+        # uncomment for testing
         return f'c:/seti/rms-website/website/galleries/{id[:5]}xxx/{id}.html'
         """return PiaPage.JEKYLL_ROOT_ + GalleryPage.PRESS_RELEASES_SUBDIR_ + \
                     'pages/%sxxx/%s.html' % (id[:5], id)"""

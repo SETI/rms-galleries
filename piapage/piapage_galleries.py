@@ -511,9 +511,8 @@ def exoplanet_sort(key):
 
     return tuple(new_keys)
 
-targets = list(targets)
-#targets.sort(key=exoplanet_sort)
-print(f'targets: {targets}')
+targets = sorted(list(targets))
+
 galleries.by_target(filtered, FILEROOT, 'exoplanet', 'Exoplanet Press Releases',
                     targets)
 

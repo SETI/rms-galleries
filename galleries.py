@@ -27,13 +27,14 @@ GALLERIES_SUBDIR_      = 'galleries/'
 # Define the absolute path to the local Jekyll directory
 JEKYLL_ROOT_ = inspect.getfile(dicts).rpartition('dicts/')[0] + 'jekyll/'
 PHOTOJOURNAL_URL_      = 'https://photojournal.jpl.nasa.gov/catalog/'
+PDS_PHOTOJOURNAL_URL = '//pds-rings.seti.org/press_releases/pages/'
 
 ################################################################################
 
 def get_final_NASA_url(url):
-    """ Since NASA is now redirecting all the original photojournal links, 
+    """ Since NASA is now redirecting all the original photojournal links,
         this will (hopefully) get the redirected links for the updated galleries
-        
+
     Input:
         url     Original photojournal URL w/PIA embedded, example:
                 https://photojournal.jpl.nasa.gov/catalog/PIA24615
@@ -45,7 +46,7 @@ def get_final_NASA_url(url):
             ret = response.geturl() # geturl() returns the final URL after redirects
             print(f'orig url: {url}, response: {ret}')
             return ret
-    except urllib.error.URLError as e:
+    except urllib.error.URLError:
         # fall back to the original URL so generated hrefs stay valid
         return url
 
@@ -490,19 +491,19 @@ def by_target(catalog, fileroot, url_prefix, title_prefix, targets,
             links[-1].append((filename, _label(target, pages, pages),
                                         _title(target, pages, pages)))
             product_ids[filename] = ids
-        
+
     _gallery(fileroot, product_ids, catalog, links)
-    
+
 class FixIndent(yaml.Dumper):
 
     def increase_indent(self, flow=False, indentless=False):
-        return super(FixIndent, self).increase_indent(flow, False)    
+        return super().increase_indent(flow, False)
 
 ################################################################################
 # Internal function to write a full set of browse pages
 ################################################################################
 
-def _gallery(fileroot, product_ids, catalog, links):
+def _gallery(fileroot, product_ids, catalog, links, resolve_urls=False):
     """Write a a complete set of Jekyll gallery pages of thumbnails with links
     between one another and to the image pages.
 
@@ -514,6 +515,8 @@ def _gallery(fileroot, product_ids, catalog, links):
                         associated GalleryPage object.
         links           a list structure defining the labels, titles and html
                         filenames for a thumbnail gallery. See details below.
+        resolve_urls    if True, resolve NASA URLs to their final redirected
++                        location (time-consuming operation).
 
     The basic element in the links structure is a tuple
         (filename, label, title)
@@ -534,13 +537,8 @@ def _gallery(fileroot, product_ids, catalog, links):
 
     The first tuple in a sublist has an extra element as shown:
         (filename, label_if_closed, label_if_open, title)
- 
+
     """
-    #####
-    # SET THIS TO FALSE FOR DEBUGGING BECAUSE TRUE IS *VERY* TIMECONSUMING
-    get_referring_url = False
-    #####
-    # print(f'links: {links}')
 
     def create_yaml_header(title):
         data = {}
@@ -549,7 +547,7 @@ def _gallery(fileroot, product_ids, catalog, links):
         data['title'] = title.encode('ascii', 'xmlcharrefreplace').decode('ascii')
 
         return data
-    
+
     def create_previous_next_menu(isSublist, previous_link):
         page_menu_data = {}
 
@@ -576,7 +574,7 @@ def _gallery(fileroot, product_ids, catalog, links):
 
         return page_menu_data
 
-        
+
     def create_menu_item(title, url, alt):
         return {
             'menu_item': {
@@ -585,7 +583,7 @@ def _gallery(fileroot, product_ids, catalog, links):
                 'alt': alt
             }
         }
-    
+
     def create_jump_to_links(link_list, sublist = None):
         jump_to_links = []
 
@@ -595,7 +593,7 @@ def _gallery(fileroot, product_ids, catalog, links):
                     (url, title, _, alt) = element
                 else:
                     (url, title, alt) = element
-                    
+
                 jump_to_links.append(create_menu_item(title, url, alt))
 
             else:
@@ -605,7 +603,7 @@ def _gallery(fileroot, product_ids, catalog, links):
                             (url, _, title, alt) = subelement
                         else:
                             (url, title, alt) = subelement
-                            
+
                         jump_to_links.append(create_menu_item(title, url, alt))
                 else:
                     subelement = element[0]
@@ -613,21 +611,23 @@ def _gallery(fileroot, product_ids, catalog, links):
                         (url, title, _, alt) = subelement
                     else:
                         (url, title, alt) = subelement
-                        
+
                     jump_to_links.append(create_menu_item(title, url, alt))
 
- 
+
         return jump_to_links
-    
+
     def create_floated_img_blocks(filename):
         floated_img_blocks = []
         for id in product_ids[filename]:
             title = catalog[id].title.encode('ascii', 'xmlcharrefreplace').decode('ascii')
             alt = id + ':' + title.replace('"', '&quot;')
-            href = PHOTOJOURNAL_URL_ + id
-            if get_referring_url is True:
-                href = get_final_NASA_url(href)
-             
+            ##href = PHOTOJOURNAL_URL_ + id
+            href = PDS_PHOTOJOURNAL_URL + id[:5] + 'xxx/' + id + '.html'
+
+            ##if resolve_urls is True:
+                ##href = get_final_NASA_url(href)
+
             row_data = {
                 'row': '',
                 'href': href,
@@ -639,7 +639,7 @@ def _gallery(fileroot, product_ids, catalog, links):
                 row_data['movie'] = True
 
             row_data = {k: v for k, v in row_data.items() if v is not None}
-            floated_img_blocks.append({k: v for k, v in row_data.items() if v is not None}) 
+            floated_img_blocks.append({k: v for k, v in row_data.items() if v is not None})
 
         return floated_img_blocks
 
@@ -649,12 +649,13 @@ def _gallery(fileroot, product_ids, catalog, links):
         # Adding '---' at the beginning and end of the YAML
         yaml_output = f"---\n{yaml_output}---\n"
         yaml_output += "\n# {{ page.title }}\n\n---\n\n{% include gallery.html %}\n"
-        
+
         # Write YAML data to file
         filepath = os.path.join(fileroot, filename)
+        os.makedirs(os.path.dirname(filepath) or '.', exist_ok=True)
         with open(filepath, 'w') as f:
             f.write(yaml_output)
-   
+
     # flatten the array of arrays to make it easier to create the next and previous links
     all_links = list(itertools.chain.from_iterable(
         item if isinstance(item, list) else [item] for item in links
@@ -666,7 +667,7 @@ def _gallery(fileroot, product_ids, catalog, links):
             main_links.append(element)
         elif isinstance(element, list):
             main_links.append(element[0])
-   
+
     previous_link = None
     for index, item in enumerate(links):
         if isinstance(item, tuple):
@@ -678,7 +679,7 @@ def _gallery(fileroot, product_ids, catalog, links):
             if len(all_links) > 1:
                 yaml_data['page_menu'] = create_previous_next_menu(False, previous_link)
                 previous_link = url
- 
+
                 # jump to navigation
                 yaml_data['jump_to'] = create_jump_to_links(links)
 
@@ -686,16 +687,16 @@ def _gallery(fileroot, product_ids, catalog, links):
             yaml_data['image_table'] = create_floated_img_blocks(url)
 
             write_yaml_file(url, yaml_data)
-   
+
         else:
             for subindex, subitem in enumerate(item):
                 if len(subitem) > 3:
-                    (url, title, subtitle, alt,) = subitem
+                    (url, _, _, alt,) = subitem
                 else:
                     (url, _, alt,) = subitem
 
                 yaml_data = create_yaml_header(alt)
-                
+
                 yaml_data['page_menu'] = create_previous_next_menu(True, previous_link)
                 previous_link = url
 
@@ -706,5 +707,5 @@ def _gallery(fileroot, product_ids, catalog, links):
                 yaml_data['image_table'] = create_floated_img_blocks(url)
 
                 write_yaml_file(url, yaml_data)
-            
+
 ################################################################################
