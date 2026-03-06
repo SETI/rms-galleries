@@ -4,15 +4,16 @@
 # An abstract class and methods to handle the reading and interpretation of web
 # pages containing press release materials and their captions.
 #
-# NOTE: The code used to scrape the NASA gallery pages has been obseleted by 
+# NOTE: The code used to scrape the NASA gallery pages has been obseleted by
 #       the changes to the NASA photojournal website.  For the most part,
-#       the code may still work w/the static pages that were previously 
-#       downloaded and stored on the SETI dropbox; however, as we are no 
+#       the code may still work w/the static pages that were previously
+#       downloaded and stored on the SETI dropbox; however, as we are no
 #       longer maintaining the individual pages, this code will become obselete.
 #
 # Andrew Lin & Mark Showalter
 ################################################################################
 
+from galleries import FixIndent
 from bs4 import BeautifulSoup, Comment
 import yaml
 import os
@@ -56,11 +57,6 @@ def reset_usage():
     for category in KEYWORD_USAGE:
         for regex in KEYWORD_USAGE[category]:
             KEYWORD_USAGE[category][regex] = []
-            
-class FixIndent(yaml.Dumper):
-
-    def increase_indent(self, flow=False, indentless=False):
-        return super(FixIndent, self).increase_indent(flow, False)            
 
 ################################################################################
 
@@ -185,7 +181,7 @@ class GalleryPage(object):
             self._background_text = '\n\n'.join(paragraphs)
 
         return self._background_text
-    
+
     @property
     def keywords(self):
         """A list of keywords associated with the caption."""
@@ -321,7 +317,7 @@ class GalleryPage(object):
                 if len(test) == 1:
                     primary = test[0]
 
-                # Failing that, see if there is exactly 
+                # Failing that, see if there is exactly
                 else:
                     test = self._keywords_with_suffixes_from_background
                     test = {k.partition('+')[0] for k in test if suffix in k}
@@ -682,7 +678,7 @@ class GalleryPage(object):
 
         # Cache the result the first time this is called
         if not hasattr(self, '_keywords_with_suffixes_from_title_found'):
-            title = self.title.replace('Moon', 'moon') 
+            title = self.title.replace('Moon', 'moon')
                 # Avoid being fooled by capitalization of title!
             self._keywords_with_suffixes_from_title_found = \
                                 find_keywords(title, self)
@@ -996,7 +992,7 @@ class GalleryPage(object):
             yaml_data['layout_style'] = 'default'
             yaml_data['title'] = pagetitle
             yaml_data['catalog_table'] = []
-            
+
             # Create yaml table of keywords
             names = ['Target',
                      'System',
@@ -1062,10 +1058,10 @@ class GalleryPage(object):
                         'value': value[0].encode('ascii', 'xmlcharrefreplace').decode('ascii'),
                         'additional_values': value[1].encode('ascii', 'xmlcharrefreplace').decode('ascii')
                     }
-                    
+
                 yaml_data['catalog_table'].append(row)
-                
-            yaml_output = yaml.dump(yaml_data, Dumper=FixIndent, default_flow_style=False, sort_keys=False)
+
+            yaml_output = yaml.dump(yaml_data, Dumper=galleries.FixIndent, default_flow_style=False, sort_keys=False)
             yaml_output = f"---\n{yaml_output}---\n"
             f.write(yaml_output)
             # Include small image with a link to a larger one
@@ -1099,7 +1095,7 @@ class GalleryPage(object):
             f.write('\n')
 
             # Write caption
-            f.write('## Caption:  \n') 
+            f.write('## Caption:  \n')
             GalleryPage.prettify_text_blocks(self.caption_soup, replacements, f )
 
             f.write('\n\n')
@@ -1110,7 +1106,7 @@ class GalleryPage(object):
                 GalleryPage.prettify_text_blocks(self.background_soup, replacements, f )
 
                 f.write('\n\n')
-                
+
             f.write('{% include press_release_data_table.html %}\n')
 
 

@@ -622,6 +622,10 @@ def _gallery(fileroot, product_ids, catalog, links, resolve_urls=False):
         for id in product_ids[filename]:
             title = catalog[id].title.encode('ascii', 'xmlcharrefreplace').decode('ascii')
             alt = id + ':' + title.replace('"', '&quot;')
+
+            # Commenting out the fix to point to the NASA photojournal for now and
+            # keeping the PDS links as a temporary solution until NASA photojournal
+            # completes some of their implementation modifications.
             ##href = PHOTOJOURNAL_URL_ + id
             href = PDS_PHOTOJOURNAL_URL + id[:5] + 'xxx/' + id + '.html'
 
