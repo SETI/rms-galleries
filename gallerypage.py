@@ -1046,7 +1046,7 @@ class GalleryPage(object):
                       self.id,
             ]
 
-            for (name, value) in zip(names, values):
+            for (name, value) in zip(names, values, strict=True):
                 if isinstance(value, str):
                     row = {
                         'table_row': name,
@@ -1061,7 +1061,7 @@ class GalleryPage(object):
 
                 yaml_data['catalog_table'].append(row)
 
-            yaml_output = yaml.dump(yaml_data, Dumper=galleries.FixIndent, default_flow_style=False, sort_keys=False)
+            yaml_output = yaml.dump(yaml_data, Dumper=FixIndent, default_flow_style=False, sort_keys=False)
             yaml_output = f"---\n{yaml_output}---\n"
             f.write(yaml_output)
             # Include small image with a link to a larger one

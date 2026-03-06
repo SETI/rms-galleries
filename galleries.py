@@ -31,6 +31,11 @@ PDS_PHOTOJOURNAL_URL = '//pds-rings.seti.org/press_releases/pages/'
 
 ################################################################################
 
+class FixIndent(yaml.Dumper):
+
+    def increase_indent(self, flow=False, indentless=False):
+        return super().increase_indent(flow, False)
+
 def get_final_NASA_url(url):
     """ Since NASA is now redirecting all the original photojournal links,
         this will (hopefully) get the redirected links for the updated galleries
@@ -493,11 +498,6 @@ def by_target(catalog, fileroot, url_prefix, title_prefix, targets,
             product_ids[filename] = ids
 
     _gallery(fileroot, product_ids, catalog, links)
-
-class FixIndent(yaml.Dumper):
-
-    def increase_indent(self, flow=False, indentless=False):
-        return super().increase_indent(flow, False)
 
 ################################################################################
 # Internal function to write a full set of browse pages

@@ -425,7 +425,7 @@ class PiaPage(GalleryPage):
     def local_page_url_for_id(id):
 
         id = PiaPage.get_id(id)
-        return GalleryPage.PHOTOJOURNAL_URL + id + '.html'
+        return GalleryPage.PDS_PHOTOJOURNAL_URL + id + '.html'
 
     @staticmethod
     def local_thumbnail_url_for_id(id):
@@ -780,7 +780,7 @@ class PiaPage(GalleryPage):
 
             current_node = current_node.next_sibling
 
-        background_indices = []
+       # background_indices = []
 
        # Test the last eight paragraphs for background info
         """ this code is currently under construction for individual PIA pages
@@ -840,15 +840,13 @@ class PiaPage(GalleryPage):
                 items = text.split('\n')
 
                 new_items = []
-                for k in range(len(items)):
-                    item = items[k]
+                for item in items:
                     item = item.strip()
-                    item = item.replace('\\r','').replace('\\n','') # Fix HTML
-                    item = item.strip()
-                    if not item: continue
+                    item = item.replace('\\r','').replace('\\n','').strop() # Fix HTML
+                    if not item:
+                        continue
 
-                parts = item.split(',')
-                for part in parts:
+                for part in item.split(','):
                     new_items.append(part.strip())
 
                 pair.append(new_items)
@@ -882,9 +880,9 @@ class PiaPage(GalleryPage):
 
         id = PiaPage.get_id(id)
         # uncomment for testing
-        return f'c:/seti/rms-website/website/galleries/{id[:5]}xxx/{id}.html'
-        """return PiaPage.JEKYLL_ROOT_ + GalleryPage.PRESS_RELEASES_SUBDIR_ + \
-                    'pages/%sxxx/%s.html' % (id[:5], id)"""
+        # return f'c:/seti/rms-website/website/galleries/{id[:5]}xxx/{id}.html'
+        return PiaPage.JEKYLL_ROOT_ + GalleryPage.PRESS_RELEASES_SUBDIR_ + \
+                    'pages/%sxxx/%s.html' % (id[:5], id)
 
     pattern = '"https?://' + PHOTOJOURNAL_DOMAIN + '/catalog/(PIA..)(...)\"'
     XREF_BEFORE = re.compile(pattern)
@@ -956,7 +954,7 @@ def build_catalog(incremental=True, verbose=True, download=False, path=None,
                 print('catalog loaded')
 
             updating = True
-        except:
+        except Exception:
             piapages = {}
             if verbose:
                 print('starting new catalog')
