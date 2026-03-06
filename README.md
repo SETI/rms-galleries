@@ -27,12 +27,14 @@
       ``missions``, ``hosts``, ``keywords``, ``caption_html``, etc.
     - There should be a single __GalleryPage__ object associated with each HTML page
       online in the ``press_releases/pages`` subdirectory.
-- Subclass __PiaPage__ handles Photojournal gallery pages that used to live at ``https://photojournal.jpl.nasa.gov/``,
-  but now exist in a diff form at ``https://photojournal.jpl.nasa.gov/catalog/``
-    - Note that the new gallery pages from NASA have a completely different design which unfortunately obsoletes
-      the bulk of the gallery page code.
-    - This class is defined in ``piapage/__init__.py``. Use "``import piapage``".
-    - Various other files in the ``piapage`` directory support this class.
+- **DEPRECATED/LEGACY:** Subclass __PiaPage__ handles legacy Photojournal gallery pages.
+    - **⚠️ This workflow is deprecated and unsupported.** The old workflow that creates galleries from 
+      Photojournal press releases at ``https://photojournal.jpl.nasa.gov/`` is no longer the recommended approach.
+    - Modern Photojournal data is now available at ``https://photojournal.jpl.nasa.gov/catalog/`` with a completely 
+      different design that has obsoleted most of the original gallery page code.
+    - This class is defined in ``piapage/__init__.py`` and documented in detail in the 
+      [Legacy / Unsupported Workflows](#legacy--unsupported-workflows) section below.
+    - **Do not use this workflow for new gallery development.** Please refer to the new catalog URL instead.
 - Subclass __HubblePage__ handles planetary web pages at ``https://hubblesite.org/``.
     - This work was not completed.
 - The idea is that each subclass of GalleryPage handles the nuts and bolts of
@@ -56,7 +58,17 @@
     - ``by_target``takes a dictionary of GalleryPage objects, a bunch of additional information,
       and creates index pages that organize the selected pages by target name or target type.
 
-## PiaPage
+## Legacy / Unsupported Workflows
+
+⚠️ **This section documents deprecated workflows that are no longer actively supported.** Please do not use these approaches for new development.
+
+### PiaPage: Legacy Photojournal Gallery Workflow
+
+**STATUS: DEPRECATED AND UNSUPPORTED**
+
+The following documentation describes the legacy PiaPage workflow used to create galleries from Photojournal press releases at ``https://photojournal.jpl.nasa.gov/``. This workflow is no longer supported. For current Photojournal data, see the modern catalog at ``https://photojournal.jpl.nasa.gov/catalog/``.
+
+#### PiaPage Class Documentation
 
 - The __PiaPage__ constructor takes the ID of a Photojournal page as a string (e.g., "``PIA12345``")
   or as an integer (e.g., ``12345``) and creates a __PiaPage__ for that product.
@@ -114,7 +126,9 @@ of Technology in Pasadena, manages the mission....
     - ``random-scripts/getgif.sh`` might be useful for downloading missing images.
 - You can ignore anything in the ``piapage/training`` subdirectory. We're not using it now.
 
-### Gallery Deployment Procedure
+#### Legacy Gallery Deployment Procedure
+
+The following steps describe the legacy process for deploying Photojournal-based galleries. **This workflow is deprecated.**
 
 1. Make sure your ``PIAPATH`` environment variable points to a local copy of the shared Dropbox
    directory ``PDS-Galleries/PIAxxxxx``. I strongly recommend that you work on a local copy, and

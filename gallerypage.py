@@ -1066,7 +1066,7 @@ class GalleryPage(object):
             f.write(yaml_output)
             # Include small image with a link to a larger one
             f.write('# {{ page.title }}\n\n')
-            f.write('[ ![{{ page.title }}]({{ site.baseurl}}%s){:target="_blank"}]({{ site.baseurl}}%s){:target="_blank"}{: .press_release}\n\n' % (self.local_small_url, self.local_medium_url))
+            f.write('[ ![{{ page.title }}](%s){:target="_blank"}]({{ site.baseurl}}%s){:target="_blank"}{: .press_release}\n\n' % (self.local_small_url, self.local_medium_url))
 
             f.write(' * Click the [image above](%s) for a larger view\n' % self.local_medium_url)
 
