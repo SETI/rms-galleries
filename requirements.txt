@@ -1,10 +1,10 @@
-numpy
-pyparsing
-pycurl
-bs4
-lxml
-pillow
-PyYAML
+numpy>=1.21.0
+pyparsing>=3.0.0
+pycurl>=7.45.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+pillow>=10.0.0
+PyYAML>=6.0
 rms-filecache
 rms-textkernel
 rms-julian

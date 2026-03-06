@@ -9,18 +9,18 @@ def repair_tables(missions, hosts, instruments, targets, systems):
     #### Always ensure that each list has at least one element, possibly blank
 
     if 'Sol' in systems or 'Sun' in systems:
-        systems = ''
+        systems = ['']
 
     if 'Unknown' in systems:
-        systems = ''
+        systems = ['']
 
     if 'Sol' in targets:
-        targets = 'Sun'
-        systems = 'Sun'
+        targets = ['Sun']
+        systems = ['Sun']
 
     if 'Rosetta' in missions:
-        if targets == 'Comet':
-            targets = '67P/Churyumov-Gerasimenko'
+        if targets[0] == 'Comet':
+            targets[0] = '67P/Churyumov-Gerasimenko'
 
     #if missions[0] == 'Magellan' and len(hosts) > 1:
     if missions == 'Magellan' and len(hosts) > 1:

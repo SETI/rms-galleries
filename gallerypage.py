@@ -1081,7 +1081,7 @@ class GalleryPage(object):
                 except KeyError:
                     continue
 
-                f.write(' * %s[%s](%s){:target="_blank"} ' % (icon, key, url))
+                f.write(' * %s[%s]({{ site.baseurl }}%s){:target="_blank"} ' % (icon, key, url))
                 if shape:
                     f.write('(%d x %d) ' % shape)
                 if size:

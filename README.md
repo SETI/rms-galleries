@@ -4,7 +4,9 @@
 
 - Install python3
 - Create a virtual environment: python -m venv venv
-- source venv\Scripts\activate
+- Activate the virtual environment
+  - Windows: `venv\Scripts\activate`
+  - macOS/Linux: `source venv/bin/activate`
 - cd to galleries directory
 - Make sure packages are available: pip install -r requirements.txt
 
@@ -26,9 +28,9 @@
     - There should be a single __GalleryPage__ object associated with each HTML page
       online in the ``press_releases/pages`` subdirectory.
 - Subclass __PiaPage__ handles Photojournal gallery pages that used to live at ``https://photojournal.jpl.nasa.gov/``,
-      but now exist in a diff form at ``https://photojournal.jpl.nasa.gov/catalog/``
-    - Note that the new gallery pages from NASA have a completely different design which unfortunately obseletes 
-       the bulk of the gallery page code.
+  but now exist in a diff form at ``https://photojournal.jpl.nasa.gov/catalog/``
+    - Note that the new gallery pages from NASA have a completely different design which unfortunately obsoletes
+      the bulk of the gallery page code.
     - This class is defined in ``piapage/__init__.py``. Use "``import piapage``".
     - Various other files in the ``piapage`` directory support this class.
 - Subclass __HubblePage__ handles planetary web pages at ``https://hubblesite.org/``.
