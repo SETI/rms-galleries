@@ -44,6 +44,11 @@ def get_final_NASA_url(url):
         url     Original photojournal URL w/PIA embedded, example:
                 https://photojournal.jpl.nasa.gov/catalog/PIA24615
     """
+
+    # Only allow http/https schemes
+    if not url.startswith(('http://', 'https://')):
+        return url
+
     try:
         opener = urllib.request.build_opener()
         request = urllib.request.Request(url)
@@ -516,7 +521,7 @@ def _gallery(fileroot, product_ids, catalog, links, resolve_urls=False):
         links           a list structure defining the labels, titles and html
                         filenames for a thumbnail gallery. See details below.
         resolve_urls    if True, resolve NASA URLs to their final redirected
-+                        location (time-consuming operation).
+                        location (time-consuming operation).
 
     The basic element in the links structure is a tuple
         (filename, label, title)
@@ -623,14 +628,16 @@ def _gallery(fileroot, product_ids, catalog, links, resolve_urls=False):
             title = catalog[id].title.encode('ascii', 'xmlcharrefreplace').decode('ascii')
             alt = id + ':' + title.replace('"', '&quot;')
 
-            # Commenting out the fix to point to the NASA photojournal for now and
-            # keeping the PDS links as a temporary solution until NASA photojournal
-            # completes some of their implementation modifications.
-            ##href = PHOTOJOURNAL_URL_ + id
             href = PDS_PHOTOJOURNAL_URL + id[:5] + 'xxx/' + id + '.html'
 
-            ##if resolve_urls is True:
-                ##href = get_final_NASA_url(href)
+            """
+            # NOTE: the NASA photojournal should NOT be usedfor now,
+            # keeping the PDS links as a temporary solution until NASA photojournal
+            # completes some of their implementation modifications.
+            """
+            if resolve_urls is True:
+                NASA_href = PHOTOJOURNAL_URL_ + id
+                href = get_final_NASA_url(NASA_href)
 
             row_data = {
                 'row': '',
@@ -642,7 +649,6 @@ def _gallery(fileroot, product_ids, catalog, links, resolve_urls=False):
             if catalog[id].is_movie:
                 row_data['movie'] = True
 
-            row_data = {k: v for k, v in row_data.items() if v is not None}
             floated_img_blocks.append({k: v for k, v in row_data.items() if v is not None})
 
         return floated_img_blocks
@@ -675,7 +681,7 @@ def _gallery(fileroot, product_ids, catalog, links, resolve_urls=False):
     previous_link = None
     for index, item in enumerate(links):
         if isinstance(item, tuple):
-            (url, title, alt,) = item
+            (url, _, alt,) = item
 
             yaml_data = create_yaml_header(alt)
 
