@@ -393,15 +393,15 @@ def asteroid_sort(key):
         intval = int(parts[0])
     except ValueError:
         if key == 'Pluto':
-            return (-200, 'Pluto')
+            return ((0, -200), (1, 'pluto'))
         if key == 'Charon':
-            return (-100, 'Charon')
-        return (1000000000, key.lower())    # names after numbers
+            return ((0, -100), (1, 'charon'))
+        return ((0, 1000000000), (1, key.lower()))    # names after numbers
 
     if intval >= 1990 and intval < 2030:    # years last
         intval += 1000000000
 
-    return (intval, parts[2].lower())
+    return ((0, intval), (1, parts[2].lower()))
 
 targets = list(targets)
 targets.sort(key=asteroid_sort)
@@ -424,13 +424,13 @@ for page in filtered.values():
 
 def comet_sort(key):
     if key[1] == '/':
-        return (88888, key[0], key[2:].lower())
+        return ((0, 88888), (1, key[0]), (1, key[2:].lower()))
 
     parts = key.rpartition('/')
     if parts[0]:
-        return (int(parts[0][:-1]), parts[0][-1], parts[2])
+        return ((0, int(parts[0][:-1])), (1, parts[0][-1]), (1, parts[2]))
 
-    return (99999, key.lower())
+    return ((0, 99999), (1, key.lower()))
 
 targets = list(targets)
 targets.sort(key=comet_sort)
@@ -480,38 +480,45 @@ def exoplanet_sort(key):
     # replace dashes and dots with spaces
     key = key.replace('-',' ').replace('.',' ')
 
-    # split into ints and strings
+    # split into ints and strings, then encode each token as (type_flag, value)
     new_keys = []
     item = None
     for c in key:
         if c == ' ':
             if item is not None:
-                new_keys.append(item)
+                if isinstance(item, int):
+                    new_keys.append((0, item))
+                else:
+                    new_keys.append((1, item))
             item = None
         elif c.isdigit():
             if item is None:
                 item = int(c)
-            elif isinstance(item,int):
+            elif isinstance(item, int):
                 item = item * 10 + int(c)
             else:
-                new_keys.append(item)
+                new_keys.append((1, item))
                 item = int(c)
         else:
             c = c.lower()
             if item is None:
                 item = c
-            elif isinstance(item,int):
-                new_keys.append(item)
+            elif isinstance(item, int):
+                new_keys.append((0, item))
                 item = c
             else:
                 item += c
 
     if item is not None:
-        new_keys.append(item)
+        if isinstance(item, int):
+            new_keys.append((0, item))
+        else:
+            new_keys.append((1, item))
 
     return tuple(new_keys)
 
-targets = sorted(list(targets))
+targets = list(targets)
+targets.sort(key=exoplanet_sort)
 
 galleries.by_target(filtered, FILEROOT, 'exoplanet', 'Exoplanet Press Releases',
                     targets)

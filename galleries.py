@@ -52,7 +52,7 @@ def get_final_NASA_url(url):
     try:
         opener = urllib.request.build_opener()
         request = urllib.request.Request(url)
-        with opener.open(request) as response:
+        with opener.open(request, timeout=10) as response:
             ret = response.geturl() # geturl() returns the final URL after redirects
             print(f'orig url: {url}, response: {ret}')
             return ret
@@ -115,6 +115,7 @@ def by_release_date(catalog, fileroot, url_prefix, title_prefix,
     tuples = []
     for (product_id, page) in catalog.items():
         tuples.append((page.release_date, product_id))
+    tuples.sort()
 
     # Group by month
     by_month = {}
@@ -624,11 +625,11 @@ def _gallery(fileroot, product_ids, catalog, links, resolve_urls=False):
 
     def create_floated_img_blocks(filename):
         floated_img_blocks = []
-        for id in product_ids[filename]:
-            title = catalog[id].title.encode('ascii', 'xmlcharrefreplace').decode('ascii')
-            alt = id + ':' + title.replace('"', '&quot;')
+        for product_id in product_ids[filename]:
+            title = catalog[product_id].title.encode('ascii', 'xmlcharrefreplace').decode('ascii')
+            alt = product_id + ':' + title.replace('"', '&quot;')
 
-            href = PDS_PHOTOJOURNAL_URL + id[:5] + 'xxx/' + id + '.html'
+            href = PDS_PHOTOJOURNAL_URL + product_id[:5] + 'xxx/' + product_id + '.html'
 
             """
             # NOTE: the NASA photojournal should NOT be usedfor now,
@@ -636,17 +637,17 @@ def _gallery(fileroot, product_ids, catalog, links, resolve_urls=False):
             # completes some of their implementation modifications.
             """
             if resolve_urls is True:
-                NASA_href = PHOTOJOURNAL_URL_ + id
+                NASA_href = PHOTOJOURNAL_URL_ + product_id
                 href = get_final_NASA_url(NASA_href)
 
             row_data = {
                 'row': '',
                 'href': href,
-                'src': catalog[id].local_thumbnail_url,
+                'src': catalog[product_id].local_thumbnail_url,
                 'alt': alt,
                 'title': title
             }
-            if catalog[id].is_movie:
+            if catalog[product_id].is_movie:
                 row_data['movie'] = True
 
             floated_img_blocks.append({k: v for k, v in row_data.items() if v is not None})

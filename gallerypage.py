@@ -4,11 +4,11 @@
 # An abstract class and methods to handle the reading and interpretation of web
 # pages containing press release materials and their captions.
 #
-# NOTE: The code used to scrape the NASA gallery pages has been obseleted by
+# NOTE: The code used to scrape the NASA gallery pages has been obsoleted by
 #       the changes to the NASA photojournal website.  For the most part,
 #       the code may still work w/the static pages that were previously
 #       downloaded and stored on the SETI dropbox; however, as we are no
-#       longer maintaining the individual pages, this code will become obselete.
+#       longer maintaining the individual pages, this code will become obsolete.
 #
 # Andrew Lin & Mark Showalter
 ################################################################################
