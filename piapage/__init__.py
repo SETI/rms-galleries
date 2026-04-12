@@ -420,7 +420,7 @@ class PiaPage(GalleryPage):
     def local_page_url_for_id(id):
 
         id = PiaPage.get_id(id)
-        return GalleryPage.PDS_PHOTOJOURNAL_URL + id + '.html'
+        return GalleryPage.PDS_PHOTOJOURNAL_URL + f'{id[:5]}xxx/{id}.html'
 
     @staticmethod
     def local_thumbnail_url_for_id(id):
@@ -763,6 +763,9 @@ class PiaPage(GalleryPage):
         # Get the caption as soup
 
         header_element = self.section_soup.find('h2', string="Description")
+
+        if header_element is None:
+            return (self.section_soup, BeautifulSoup('', PARSER))
 
         caption_as_soup = BeautifulSoup('', PARSER)
         background_as_soup = BeautifulSoup('', PARSER)
