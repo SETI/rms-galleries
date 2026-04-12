@@ -26,7 +26,8 @@ QUARTER_ABBREVS = ['', 'Jan-Mar', '', '', 'Apr-Jun', '', '',
 GALLERIES_SUBDIR_      = 'galleries/'
 # Define the absolute path to the local Jekyll directory
 JEKYLL_ROOT_ = inspect.getfile(dicts).rpartition('dicts/')[0] + 'jekyll/'
-PHOTOJOURNAL_URL_      = 'https://photojournal.jpl.nasa.gov/catalog/'
+PHOTOJOURNAL_DOMAIN = 'photojournal.jpl.nasa.gov'
+PHOTOJOURNAL_URL_   = 'https://' + PHOTOJOURNAL_DOMAIN + '/catalog/'
 PDS_PHOTOJOURNAL_URL = '//pds-rings.seti.org/press_releases/pages/'
 
 ################################################################################
@@ -554,7 +555,7 @@ def _gallery(fileroot, product_ids, catalog, links, resolve_urls=False):
 
         return data
 
-    def create_previous_next_menu(isSublist, previous_link):
+    def create_previous_next_menu(all_links, main_links, previous_link, item=None):
         page_menu_data = {}
 
         if url != all_links[0][0]:
@@ -564,7 +565,7 @@ def _gallery(fileroot, product_ids, catalog, links, resolve_urls=False):
             page_menu_data['last_link'] = all_links[-1][0]
 
         # handle the sublist next/previous differently
-        if isSublist:
+        if item is not None:
             if subindex + 1 < len(item):
                 page_menu_data['next_link'] = item[subindex + 1][0]
 
@@ -688,7 +689,7 @@ def _gallery(fileroot, product_ids, catalog, links, resolve_urls=False):
 
             # don't create addition menus when it is a flat structure
             if len(all_links) > 1:
-                yaml_data['page_menu'] = create_previous_next_menu(False, previous_link)
+                yaml_data['page_menu'] = create_previous_next_menu(all_links, main_links, previous_link)
                 previous_link = url
 
                 # jump to navigation
@@ -708,7 +709,7 @@ def _gallery(fileroot, product_ids, catalog, links, resolve_urls=False):
 
                 yaml_data = create_yaml_header(alt)
 
-                yaml_data['page_menu'] = create_previous_next_menu(True, previous_link)
+                yaml_data['page_menu'] = create_previous_next_menu(all_links, main_links, previous_link, item)
                 previous_link = url
 
                 # jump to navigation

@@ -9,6 +9,7 @@
 # Andrew Lin & Mark Showalter
 ################################################################################
 
+import galleries
 from gallerypage import GalleryPage
 import storedpage
 
@@ -38,8 +39,6 @@ PARSER = 'lxml'
 PIA_REGEX = re.compile(r'PIA[0-9]{5}')
 YMD_REGEX = re.compile(r'[12][0-9]{3}-[01][0-9]-[0-3][0-9]$')
 
-PHOTOJOURNAL_URL = '//photojournal.jpl.nasa.gov/catalog/'
-PDS_PHOTOJOURNAL_URL = '//pds-rings.seti.org/press_releases/pages/'
 
 # Any mission that starts with one of these is definitely planetary
 MISSIONS_ALWAYS_INCLUDED = set([
@@ -79,10 +78,6 @@ class PiaPage(GalleryPage):
     """PiaPage is a subclass of GalleryPage. It implements the complete
     GalleryPage API for the specific case of a page on the PDS Photojournal
     website, https://photojournal.jpl.nasa.gov."""
-
-    # Class constants
-    PHOTOJOURNAL_DOMAIN = "photojournal.jpl.nasa.gov"
-    PHOTOJOURNAL_URL = "https://" + PHOTOJOURNAL_DOMAIN
 
     MISSING_PAGE_TEXT = 'No images in our database met your search criteria'
     BACK_TO_HOME_TEXT = 's.channel="Home"'
@@ -310,25 +305,25 @@ class PiaPage(GalleryPage):
                     pass            # If anything goes wrong, size = 0
 
             size = int(size + 0.5)  # round to int
-            self.remote_version_info[key] = (PiaPage.PHOTOJOURNAL_URL + href,
+            self.remote_version_info[key] = (Galleries.PHOTOJOURNAL_URL + href,
                                              self.shape, size)
 
         for img in self.section_soup.find_all('img'):
             if 'browse' in img.attrs['src']:
                 self.remote_version_info['Browse Image'] = (
-                        PiaPage.PHOTOJOURNAL_URL + str(img.attrs['src']), (), 0)
+                        Galleries.PHOTOJOURNAL_URL + str(img.attrs['src']), (), 0)
                 break
 
         for a in self.section_soup.find_all('a'):
             if 'jpegMod' in a.attrs['href']:
                 self.remote_version_info['Medium Image'] = (
-                        PiaPage.PHOTOJOURNAL_URL + str(a.attrs['href']), (), 0)
+                        Galleries.PHOTOJOURNAL_URL + str(a.attrs['href']), (), 0)
                 break
 
         # If it's a movie
         if self.is_movie:
             self.remote_version_info['Movie Download Options'] = \
-                    (PiaPage.PHOTOJOURNAL_URL + '/animation/' + self.id, (), 0)
+                    (Galleries.PHOTOJOURNAL_URL + '/animation/' + self.id, (), 0)
 
         self.local_page_url      = PiaPage.local_page_url_for_id(self.id)
         self.local_thumbnail_url = PiaPage.local_thumbnail_url_for_id(self.id)
@@ -382,7 +377,7 @@ class PiaPage(GalleryPage):
     def remote_page_url_for_id(id):
 
         id = PiaPage.get_id(id)
-        return PiaPage.PHOTOJOURNAL_URL + '/catalog/' + id
+        return Galleries.PHOTOJOURNAL_URL + '/catalog/' + id
 
     @staticmethod
     def remote_thumbnail_url_for_id(id):
@@ -391,9 +386,9 @@ class PiaPage(GalleryPage):
 
         ipia = int(id[3:])
         if ipia in THUMBNAIL_GIF_PIAPAGES:
-            return PiaPage.PHOTOJOURNAL_URL + '/thumb/' + id + '.gif'
+            return Galleries.PHOTOJOURNAL_URL + '/thumb/' + id + '.gif'
         else:
-            return PiaPage.PHOTOJOURNAL_URL + '/thumb/' + id + '.jpg'
+            return Galleries.PHOTOJOURNAL_URL + '/thumb/' + id + '.jpg'
 
     @staticmethod
     def remote_small_url_for_id(id):
@@ -402,9 +397,9 @@ class PiaPage(GalleryPage):
 
         ipia = int(id[3:])
         if ipia in SMALL_GIF_PIAPAGES:
-            return PiaPage.PHOTOJOURNAL_URL + '/browse/' + id + '.gif'
+            return Galleries.PHOTOJOURNAL_URL + '/browse/' + id + '.gif'
         else:
-            return PiaPage.PHOTOJOURNAL_URL + '/jpeg/' + id + '.jpg'
+            return Galleries.PHOTOJOURNAL_URL + '/jpeg/' + id + '.jpg'
 
     @staticmethod
     def remote_medium_url_for_id(id, is_movie):
@@ -415,11 +410,11 @@ class PiaPage(GalleryPage):
         if ipia in MEDIUM_GIF_PIAPAGES:
             suffix = 'gif'
         elif is_movie:
-            return PiaPage.PHOTOJOURNAL_URL + '/animation/' + id + '.gif'
+            return Galleries.PHOTOJOURNAL_URL + '/animation/' + id + '.gif'
         else:
             suffix = 'jpg'
 
-        return PiaPage.PHOTOJOURNAL_URL + '/jpegMod/' + id + '_modest.jpg'
+        return Galleries.PHOTOJOURNAL_URL + '/jpegMod/' + id + '_modest.jpg'
 
     @staticmethod
     def local_page_url_for_id(id):
@@ -729,7 +724,7 @@ class PiaPage(GalleryPage):
         date = ''
         time_element = self.section_soup.find('time')
         if time_element:
-            date = time_element['datatime']
+            date = time_element.get('datetime', '')
 
         return date
 
@@ -884,7 +879,7 @@ class PiaPage(GalleryPage):
         return PiaPage.JEKYLL_ROOT_ + GalleryPage.PRESS_RELEASES_SUBDIR_ + \
                     'pages/%sxxx/%s.html' % (id[:5], id)
 
-    pattern = '"https?://' + PHOTOJOURNAL_DOMAIN + '/catalog/(PIA..)(...)\"'
+    pattern = '"https?://' + galleries.PHOTOJOURNAL_DOMAIN + '/catalog/(PIA..)(...)\"'
     XREF_BEFORE = re.compile(pattern)
     XREF_AFTER  = r'"/%spages/\1xxx/\1\2.html"' % \
                                     GalleryPage.PRESS_RELEASES_SUBDIR_
