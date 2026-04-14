@@ -1,5 +1,6 @@
 import os
 import sys
+import ast
 
 for arg in sys.argv[1:]:
     if arg[-12:-9] != 'PIA': continue
@@ -10,7 +11,7 @@ for arg in sys.argv[1:]:
 
     if content[:2] != "b'": continue
 
-    text = eval(content)
+    text = ast.literal_eval(content)
 
     with open(arg, 'w', encoding='utf-8') as f:
         f.write(text)

@@ -420,7 +420,7 @@ class PiaPage(GalleryPage):
     def local_page_url_for_id(id):
 
         id = PiaPage.get_id(id)
-        return GalleryPage.PDS_PHOTOJOURNAL_URL + f'{id[:5]}xxx/{id}.html'
+        return '/' + GalleryPage.PRESS_RELEASES_SUBDIR_ + f'pages/{id[:5]}xxx/{id}.html'
 
     @staticmethod
     def local_thumbnail_url_for_id(id):
@@ -463,12 +463,6 @@ class PiaPage(GalleryPage):
 
         return '/' + GalleryPage.PRESS_RELEASES_SUBDIR_ + \
                         'medium/%sxxx/%s_med.%s' % (id[:5], id, suffix)
-
-    @staticmethod
-    def page_filepath_for_id(id):
-
-        return GalleryPage.DOCUMENTS_FILE_ROOT_[:-1] + \
-               PiaPage.local_page_url_for_id(id)
 
     @staticmethod
     def thumbnail_filepath_for_id(id):
@@ -706,7 +700,7 @@ class PiaPage(GalleryPage):
     def get_title(self):
         """Return the title of the page. Example: Artemis Corona"""
 
-        return GalleryPage.soup_as_text(self.section_soup.find('title'))
+        return GalleryPage.soup_as_text(self.soup.find('title'))
 
     def get_credit(self):
         """Return the Image Credit. Example: NASA/JPL"""
@@ -773,10 +767,11 @@ class PiaPage(GalleryPage):
         # loop thru the elements after "Description"
         current_node = header_element.find_next_sibling()
         while current_node is not None:
+            next_node = current_node.next_sibling
             if isinstance(current_node, (Tag, NavigableString)):
                 caption_as_soup.append(current_node)
 
-            current_node = current_node.next_sibling
+            current_node = next_node
 
        # background_indices = []
 

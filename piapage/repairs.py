@@ -12,11 +12,12 @@ def repair_tables(missions, hosts, instruments, targets, systems):
     if not systems:
         systems = ['']
 
-    if 'Sol' in targets:
-        targets = ['Sun' if t == 'Sol' else t for t in targets]
-        # Preserve existing non-empty system values; only backfill if blank.
+    targets = ['Sun' if t == 'Sol' else t for t in targets]
+    if 'Sun' in targets and 'Sun' not in systems:
         if systems == ['']:
-           systems = ['Sun']
+            systems = ['Sun']
+        else:
+            systems.append('Sun')
 
     if 'Rosetta' in missions:
         if targets[0] == 'Comet':
@@ -31,7 +32,6 @@ def repair_tables(missions, hosts, instruments, targets, systems):
             if 'Arecibo' in instruments[0]:
                 instruments = instruments[1:] + [instruments[0]]
 
-    #if missions[0] == 'Magellan' and 'Radar System' in instruments:
     if 'Magellan' in missions and 'Radar System' in instruments:
         k = instruments.index('Radar System')
         instruments[k] = 'Imaging Radar'
