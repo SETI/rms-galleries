@@ -19,9 +19,8 @@ def repair_tables(missions, hosts, instruments, targets, systems):
         else:
             systems.append('Sun')
 
-    if 'Rosetta' in missions:
-        if targets[0] == 'Comet':
-            targets[0] = '67P/Churyumov-Gerasimenko'
+    if 'Rosetta' in missions and targets[0] == 'Comet':
+        targets[0] = '67P/Churyumov-Gerasimenko'
 
     if 'Magellan' in missions and len(hosts) > 1:
         if 'Magellan' in hosts[1:]:

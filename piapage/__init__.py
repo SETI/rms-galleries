@@ -9,7 +9,7 @@
 # Andrew Lin & Mark Showalter
 ################################################################################
 
-import galleries
+import galleries as Galleries
 from gallerypage import GalleryPage
 import storedpage
 
@@ -877,7 +877,7 @@ class PiaPage(GalleryPage):
         return PiaPage.JEKYLL_ROOT_ + GalleryPage.PRESS_RELEASES_SUBDIR_ + \
                     'pages/%sxxx/%s.html' % (id[:5], id)
 
-    pattern = '"https?://' + galleries.PHOTOJOURNAL_DOMAIN + '/catalog/(PIA..)(...)\"'
+    pattern = '"https?://' + Galleries.PHOTOJOURNAL_DOMAIN + '/catalog/(PIA..)(...)\"'
     XREF_BEFORE = re.compile(pattern)
     XREF_AFTER  = r'"/%spages/\1xxx/\1\2.html"' % \
                                     GalleryPage.PRESS_RELEASES_SUBDIR_
