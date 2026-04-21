@@ -8,21 +8,21 @@ def repair_tables(missions, hosts, instruments, targets, systems):
 
     #### Always ensure that each list has at least one element, possibly blank
 
-    if 'Sol' in systems[0]:
-        systems[0] = ''
+    systems = [s for s in systems if s not in ('Sol', 'Sun', 'Unknown')]
+    if not systems:
+        systems = ['']
 
-    if 'Unknown' in systems[0]:
-        systems[0] = ''
+    targets = ['Sun' if t == 'Sol' else t for t in targets]
+    if 'Sun' in targets and 'Sun' not in systems:
+        if systems == ['']:
+            systems = ['Sun']
+        else:
+            systems.append('Sun')
 
-    if 'Sol' in targets[0]:
-        targets[0] = 'Sun'
-        systems[0] = 'Sun'
+    if 'Rosetta' in missions and targets[0] == 'Comet':
+        targets[0] = '67P/Churyumov-Gerasimenko'
 
-    if 'Rosetta' in missions:
-        if targets[0] == 'Comet':
-            targets[0] = '67P/Churyumov-Gerasimenko'
-
-    if missions[0] == 'Magellan' and len(hosts) > 1:
+    if 'Magellan' in missions and len(hosts) > 1:
         if 'Magellan' in hosts[1:]:
             hosts.remove('Magellan')
             hosts = ['Magellan'] + hosts
@@ -31,7 +31,7 @@ def repair_tables(missions, hosts, instruments, targets, systems):
             if 'Arecibo' in instruments[0]:
                 instruments = instruments[1:] + [instruments[0]]
 
-    if missions[0] == 'Magellan' and 'Radar System' in instruments:
+    if 'Magellan' in missions and 'Radar System' in instruments:
         k = instruments.index('Radar System')
         instruments[k] = 'Imaging Radar'
 
@@ -655,11 +655,11 @@ REMOVALS = {
     'PIA24948': ('Moon', 'Satellite', 'Earth'),
 }
 
-ASTEROID1 = re.compile('[12]\d\d\d [A-Z][A-Z]?\d*$')
-ASTEROID2 = re.compile('[12]\d\d\d [A-Z][A-Z]?\d* +.*$')
-COMET1 = re.compile('\d+P/[A-Z][A-Za-z0-9 -]+$')
-COMET2 = re.compile('[CP]/[12]\d\d\d [A-Z][A-Z]?\d*$')
-COMET3 = re.compile('[CP]/[12]\d\d\d [A-Z][A-Z]?\d* +\(.*\)$')
+ASTEROID1 = re.compile(r'[12]\d\d\d [A-Z][A-Z]?\d*$')
+ASTEROID2 = re.compile(r'[12]\d\d\d [A-Z][A-Z]?\d* +.*$')
+COMET1 = re.compile(r'\d+P/[A-Z][A-Za-z0-9 -]+$')
+COMET2 = re.compile(r'[CP]/[12]\d\d\d [A-Z][A-Z]?\d*$')
+COMET3 = re.compile(r'[CP]/[12]\d\d\d [A-Z][A-Z]?\d* +\(.*\)$')
 
 def repair_piapage(page):
 

@@ -4,9 +4,18 @@
 # An abstract class and methods to handle the reading and interpretation of web
 # pages containing press release materials and their captions.
 #
+# NOTE: The code used to scrape the NASA gallery pages has been obsoleted by
+#       the changes to the NASA photojournal website.  For the most part,
+#       the code may still work w/the static pages that were previously
+#       downloaded and stored on the SETI dropbox; however, as we are no
+#       longer maintaining the individual pages, this code will become obsolete.
+#
 # Andrew Lin & Mark Showalter
 ################################################################################
 
+from galleries import FixIndent
+from bs4 import BeautifulSoup, Comment
+import yaml
 import os
 import re
 import julian
@@ -31,7 +40,7 @@ from dicts import (
 # Compile regular expressions for KEYWORDS
 KEYWORD_USAGE = {}
 compiled = {}
-for (category, pairs) in KEYWORDS.iteritems():
+for (category, pairs) in KEYWORDS.items():
     KEYWORD_USAGE[category] = {}
 
     new_pairs = []
@@ -138,7 +147,7 @@ class GalleryPage(object):
 
         text = text.strip()
         text = text.replace('\r', ' ').replace('\n', ' ')
-        text = str(text.encode('ascii', 'xmlcharrefreplace'))
+        text = text.encode('ascii', 'xmlcharrefreplace').decode('ascii')
 
         while '  ' in text:
             text = text.replace('  ', ' ')
@@ -308,7 +317,7 @@ class GalleryPage(object):
                 if len(test) == 1:
                     primary = test[0]
 
-                # Failing that, see if there is exactly 
+                # Failing that, see if there is exactly
                 else:
                     test = self._keywords_with_suffixes_from_background
                     test = {k.partition('+')[0] for k in test if suffix in k}
@@ -669,7 +678,7 @@ class GalleryPage(object):
 
         # Cache the result the first time this is called
         if not hasattr(self, '_keywords_with_suffixes_from_title_found'):
-            title = self.title.replace('Moon', 'moon') 
+            title = self.title.replace('Moon', 'moon')
                 # Avoid being fooled by capitalization of title!
             self._keywords_with_suffixes_from_title_found = \
                                 find_keywords(title, self)
@@ -968,129 +977,23 @@ class GalleryPage(object):
         replacements is a list of tuples (pattern, replacement) which are
         applied to the text prior to writing. Pattern is a regular expression
         and replacement is the associated replacement string."""
-
         parent = os.path.split(os.path.abspath(filepath))[0]
         if not os.path.exists(parent):
             os.makedirs(parent)
 
-        with open(filepath, 'w') as f:
+        with open(filepath, 'w', encoding='utf-8') as f:
 
             # Write Jekyll header
-            escaped = self.title.encode('ascii', 'xmlcharrefreplace')
-            escaped_unquoted = escaped.replace('"', '&quot;')
+            escaped = self.title.encode('ascii', 'xmlcharrefreplace').decode('ascii')
+            pagetitle = self.id + ": " + escaped.replace('"', '&quot;')
 
-            f.write('---\n')
-            f.write('layout: base\n')
-            f.write('layout_style: default\n')
-            f.write('title: "%s: %s"\n' % (self.id, escaped_unquoted))
-            f.write('---\n\n')
+            yaml_data = {}
+            yaml_data['layout'] = 'base'
+            yaml_data['layout_style'] = 'default'
+            yaml_data['title'] = pagetitle
+            yaml_data['catalog_table'] = []
 
-            f.write('<style>\n')
-            f.write('#noborder {\n')
-            f.write('    border: 0;\n')
-            f.write('}\n')
-            f.write('img {\n')
-            f.write('    margin: auto;\n')
-            f.write('    width: auto;\n')
-            f.write('    height: auto;\n')
-            f.write('    max-width: 1200px;\n')
-            f.write('    max-height: 800px;\n')
-            f.write('}\n')
-            f.write('</style>\n\n')
-
-            # Neighbor navigation mainly for debugging
-            written = False
-            if neighbors and neighbors[0]:
-                f.write('[prev](%s)\n' % neighbors[0])
-                written = True
-
-            if neighbors and neighbors[1]:
-                f.write('[next](%s)\n' % neighbors[1])
-                written = True
-
-            if written:
-                f.write('\n\n')
-
-            # Include small image with a link to a larger one
-            f.write('<table width="840px">\n')
-            f.write('<tr id="noborder">\n')
-            f.write('<td id="noborder" style="text-align:center;">\n')
-            f.write('<a href="%s">\n' % self.local_medium_url)
-            f.write('  <img src="%s"\n' % self.local_small_url)
-            f.write('       alt="%s: %s" />\n' % (self.id, escaped_unquoted))
-            f.write('</a>\n\n')
-            f.write('</td>\n')
-            f.write('</tr>\n')
-            f.write('</table>\n\n')
-
-            f.write('<br clear="left" />\n\n')
-
-            # Write title
-            f.write('# %s\n\n' % escaped)
-
-            # Include external links to more versions
-            f.write(' * Click the [image above](%s) for a larger view\n' %
-                                                self.local_medium_url)
-
-            for key in remote_keys:
-                if 'movie' in key.lower():
-                    icon = '<img src="/icons-local/movie_icon.png" /> '
-                else:
-                    icon = ''
-
-                try:
-                    (url, shape, size) = self.remote_version_info[key]
-                except KeyError:
-                    continue
-
-                f.write(' * %s[%s](%s) ' % (icon, key, url))
-                if shape:
-                    f.write('(%d x %d) ' % shape)
-                if size:
-                    if size >= 1.e6:
-                        f.write('(%.1f MB)' % (size/1.e6))
-                    else:
-                        f.write('(%.1f kB)' % (size/1000.))
-
-                f.write('\n')
-
-            f.write('\n')
-
-            # Write caption
-            f.write('<h3>Caption:</h3>\n\n')
-
-            text = self.caption_soup.prettify()
-            text = text.encode('ascii', 'xmlcharrefreplace')
-            for (pattern, repl) in replacements:
-                text = pattern.sub(repl, text)
-
-            f.write(text)
-            f.write('\n\n')
-
-            # Write background info if available
-            if self.background_text:
-
-                f.write('<h3>Background Info:</h3>\n\n')
-
-                text = self.background_soup.prettify()
-                text = text.encode('ascii', 'xmlcharrefreplace')
-                for (pattern, repl) in replacements:
-                    text = pattern.sub(repl, text)
-
-                f.write(text)
-                f.write('\n\n')
-
-            # Write a table of keywords
-            f.write('<h3>Cataloging Keywords:</h3>\n\n')
-
-            f.write("""<table>
-                          <tr>
-                            <th>Name</th>
-                            <th>Value</th>
-                            <th>Additional Values</th>
-                          </tr>
-                    """)
-
+            # Create yaml table of keywords
             names = ['Target',
                      'System',
                      'Target Type',
@@ -1126,11 +1029,6 @@ class GalleryPage(object):
 
             keywords.sort()
 
-            if '//' in self.origin_url:
-                display_url = self.origin_url.split('//')[1]
-            else:
-                display_url = self.origin_url
-
             values = [[self.targets[0],      ', '.join(self.targets[1:])],
                       [self.systems[0],      ', '.join(self.systems[1:])],
                       [self.target_types[0], ', '.join(self.target_types[1:])],
@@ -1144,36 +1042,73 @@ class GalleryPage(object):
                       self.release_date,
                       [date,                 ', '.join(other_dates)],
                       self.credit,
-                      '<a href="%s" target="_blank">%s</a>' % (self.origin_url,
-                                                               display_url),
+                      self.origin_url,
                       self.id,
             ]
 
-            for (name, value) in zip(names, values):
-                if isinstance(value, (str,unicode)):
-                    value = value.encode('ascii', 'xmlcharrefreplace')
-                    f.write("""<tr>
-                                 <td style="text-align:right">%s</td>
-                                 <td style="text-align:left" colspan="2">%s</td>
-                               </tr>
-                            """ % (name,
-                                   value.encode('ascii', 'xmlcharrefreplace'))
-                           )
+            for (name, value) in zip(names, values, strict=True):
+                if isinstance(value, str):
+                    row = {
+                        'table_row': name,
+                        'value': value.encode('ascii', 'xmlcharrefreplace').decode('ascii')
+                    }
                 else:
-                    val0 = value[0].encode('ascii', 'xmlcharrefreplace')
-                    val1 = value[1].encode('ascii', 'xmlcharrefreplace')
-                    f.write("""<tr>
-                                 <td style="text-align:right">%s</td>
-                                 <td style="text-align:left">%s</td>
-                                 <td style="text-align:left">%s</td>
-                               </tr>
-                            """ % (name,
-                                   val0.encode('ascii', 'xmlcharrefreplace'),
-                                   val1.encode('ascii', 'xmlcharrefreplace'))
-                           )
-   
-            f.write('</table>\n')
-            f.write('<br>\n')
+                    row = {
+                        'table_row': name,
+                        'value': value[0].encode('ascii', 'xmlcharrefreplace').decode('ascii'),
+                        'additional_values': value[1].encode('ascii', 'xmlcharrefreplace').decode('ascii')
+                    }
+
+                yaml_data['catalog_table'].append(row)
+
+            yaml_output = yaml.dump(yaml_data, Dumper=FixIndent, default_flow_style=False, sort_keys=False)
+            yaml_output = f"---\n{yaml_output}---\n"
+            f.write(yaml_output)
+            # Include small image with a link to a larger one
+            f.write('# {{ page.title }}\n\n')
+            f.write('[ ![{{ page.title }}](%s){:target="_blank"}]({{ site.baseurl}}%s){:target="_blank"}{: .press_release}\n\n' % (self.local_small_url, self.local_medium_url))
+
+            f.write(' * Click the [image above](%s) for a larger view\n' % self.local_medium_url)
+
+            for key in remote_keys:
+                if 'movie' in key.lower():
+                    icon = '<img src="/icons-local/movie_icon.png" /> '
+                else:
+                    icon = ''
+
+                try:
+                    (url, shape, size) = self.remote_version_info[key]
+                except KeyError:
+                    continue
+
+                f.write(' * %s[%s]({{ site.baseurl }}%s){:target="_blank"} ' % (icon, key, url))
+                if shape:
+                    f.write('(%d x %d) ' % shape)
+                if size:
+                    if size >= 1.e6:
+                        f.write('(%.1f MB)' % (size/1.e6))
+                    else:
+                        f.write('(%.1f kB)' % (size/1000.))
+
+                f.write('\n')
+
+            f.write('\n')
+
+            # Write caption
+            f.write('## Caption:  \n')
+            GalleryPage.prettify_text_blocks(self.caption_soup, replacements, f )
+
+            f.write('\n\n')
+            # Write background info if available
+            if self.background_text:
+
+                f.write('## Background Info: \n')
+                GalleryPage.prettify_text_blocks(self.background_soup, replacements, f )
+
+                f.write('\n\n')
+
+            f.write('{% include press_release_data_table.html %}\n')
+
 
 
 ################################################################################
@@ -1214,8 +1149,8 @@ DASH_DATE = ('((' + YEAR + r')-' +
 SLASH_DATE = ('((' + MONTHNO + r')/(' + DATE2 + ')/(' + YEAR + '))')
 
 # A matching string cannot have \w characters immediately before or after
-ANY_DATE = re.compile('(?<!\w)(' + MDY_DATE + '|' + DMY_DATE + '|' +
-                               DASH_DATE + '|' + SLASH_DATE + ')(?!\w)')
+ANY_DATE = re.compile(r'(?<!\w)(' + MDY_DATE + '|' + DMY_DATE + '|' +
+                               DASH_DATE + '|' + SLASH_DATE + r')(?!\w)')
 
 def find_date_substrings(text):
     """Return a list of all the date-like substrings in the given text."""

@@ -9,10 +9,11 @@
 # Andrew Lin & Mark Showalter
 ################################################################################
 
+import galleries as Galleries
 from gallerypage import GalleryPage
 import storedpage
 
-from bs4 import BeautifulSoup, ResultSet
+from bs4 import BeautifulSoup, ResultSet, NavigableString, Tag
 import requests
 import os
 import warnings
@@ -21,7 +22,7 @@ import lxml
 import re
 import pickle
 import pycurl
-from StringIO import StringIO
+from io import BytesIO
 from PIL import Image
 
 from .BACKGROUND_STRINGS import BACKGROUND_STRINGS
@@ -37,6 +38,7 @@ PARSER = 'lxml'
 
 PIA_REGEX = re.compile(r'PIA[0-9]{5}')
 YMD_REGEX = re.compile(r'[12][0-9]{3}-[01][0-9]-[0-3][0-9]$')
+
 
 # Any mission that starts with one of these is definitely planetary
 MISSIONS_ALWAYS_INCLUDED = set([
@@ -76,10 +78,6 @@ class PiaPage(GalleryPage):
     """PiaPage is a subclass of GalleryPage. It implements the complete
     GalleryPage API for the specific case of a page on the PDS Photojournal
     website, https://photojournal.jpl.nasa.gov."""
-
-    # Class constants
-    PHOTOJOURNAL_DOMAIN = "photojournal.jpl.nasa.gov"
-    PHOTOJOURNAL_URL = "https://" + PHOTOJOURNAL_DOMAIN
 
     MISSING_PAGE_TEXT = 'No images in our database met your search criteria'
     BACK_TO_HOME_TEXT = 's.channel="Home"'
@@ -134,7 +132,7 @@ class PiaPage(GalleryPage):
 
         # Make a copy if necessary
         if _dict:
-            for (key, value) in _dict.iteritems():
+            for (key, value) in _dict.items():
                 self.__dict__[key] = value
 
             return
@@ -168,30 +166,22 @@ class PiaPage(GalleryPage):
 #       self.soup = BeautifulSoup(self.html, 'html.parser')
         self.soup = BeautifulSoup(self.html, PARSER)
 
+        caption_soup = self.soup.find('div', class_='hds-caption-text')
+        if caption_soup:
+            piatext = caption_soup.find('figcaption').text
+            if piatext == self.soup.id:
+                print(f'id: {id}')
+
+        """ This code is currently underconstruction for the individual PIA pages
+        self.article_soup = self.soup.find('article')
+        self.section_soup = self.article_soup.find('section')
+
         # Validate the PIA page
-        if len(self.soup.find_all('dt')) != 3:
-            raise ValueError(self.id + " page does not contain three " +
-                                       "description tags")
-
-        text = self.soup.find_all('dt')[0].text.strip()
-        if 'Caption' not in text:
-            raise ValueError(self.id + " page contains no caption")
-
-        text = self.soup.find_all('dt')[1].text.strip()
-        if not text.startswith("Image Credit:"):
-            raise ValueError(self.id + " page contains no image credit")
-
-        text = self.soup.find_all('dt')[2].text.strip()
-        if not text.startswith("Image Addition Date:"):
-            raise ValueError(self.id + " page contains no image date")
-
-        text = self.soup.find_all('b')[0].text.lstrip()
-        if text[:8] != self.id:
-            raise ValueError(self.id + " page has invalid title: " + text)
+        # nothing here yet, original validation removed
 
         # Extract the caption and separate it from the background info
         (self.caption_soup,
-         self.background_soup) = self.get_caption_and_background()
+         self.background_soup) = self.description_and_background()
 
         self.title = self.get_title()
         self.credit = self.get_credit()
@@ -208,7 +198,7 @@ class PiaPage(GalleryPage):
         missions    = self.pia_table.get('Mission', [''])
         hosts       = self.pia_table.get('Spacecraft', [''])
         instruments = self.pia_table.get('Instrument', [''])
-        targets     = self.pia_table.get('Target Name', [''])
+        targets     = self.pia_table.get('Target', [''])
         systems     = self.pia_table.get('Is a satellite of', [''])
 
         # Fix known errors and weirdness in tables
@@ -315,25 +305,25 @@ class PiaPage(GalleryPage):
                     pass            # If anything goes wrong, size = 0
 
             size = int(size + 0.5)  # round to int
-            self.remote_version_info[key] = (PiaPage.PHOTOJOURNAL_URL + href,
+            self.remote_version_info[key] = (Galleries.PHOTOJOURNAL_URL + href,
                                              self.shape, size)
 
-        for img in self.soup.find_all('img'):
+        for img in self.section_soup.find_all('img'):
             if 'browse' in img.attrs['src']:
                 self.remote_version_info['Browse Image'] = (
-                        PiaPage.PHOTOJOURNAL_URL + str(img.attrs['src']), (), 0)
+                        Galleries.PHOTOJOURNAL_URL + str(img.attrs['src']), (), 0)
                 break
 
-        for a in self.soup.find_all('a'):
+        for a in self.section_soup.find_all('a'):
             if 'jpegMod' in a.attrs['href']:
                 self.remote_version_info['Medium Image'] = (
-                        PiaPage.PHOTOJOURNAL_URL + str(a.attrs['href']), (), 0)
+                        Galleries.PHOTOJOURNAL_URL + str(a.attrs['href']), (), 0)
                 break
 
         # If it's a movie
         if self.is_movie:
             self.remote_version_info['Movie Download Options'] = \
-                    (PiaPage.PHOTOJOURNAL_URL + '/animation/' + self.id, (), 0)
+                    (Galleries.PHOTOJOURNAL_URL + '/animation/' + self.id, (), 0)
 
         self.local_page_url      = PiaPage.local_page_url_for_id(self.id)
         self.local_thumbnail_url = PiaPage.local_thumbnail_url_for_id(self.id)
@@ -378,7 +368,7 @@ class PiaPage(GalleryPage):
             im.close()
         else:
             self.thumbnail_shape = None
-
+    """
     ############################################################################
     # Procedures to locate URLs and files
     ############################################################################
@@ -387,7 +377,7 @@ class PiaPage(GalleryPage):
     def remote_page_url_for_id(id):
 
         id = PiaPage.get_id(id)
-        return PiaPage.PHOTOJOURNAL_URL + '/catalog/' + id
+        return Galleries.PHOTOJOURNAL_URL + '/catalog/' + id
 
     @staticmethod
     def remote_thumbnail_url_for_id(id):
@@ -396,9 +386,9 @@ class PiaPage(GalleryPage):
 
         ipia = int(id[3:])
         if ipia in THUMBNAIL_GIF_PIAPAGES:
-            return PiaPage.PHOTOJOURNAL_URL + '/thumb/' + id + '.gif'
+            return Galleries.PHOTOJOURNAL_URL + '/thumb/' + id + '.gif'
         else:
-            return PiaPage.PHOTOJOURNAL_URL + '/thumb/' + id + '.jpg'
+            return Galleries.PHOTOJOURNAL_URL + '/thumb/' + id + '.jpg'
 
     @staticmethod
     def remote_small_url_for_id(id):
@@ -407,9 +397,9 @@ class PiaPage(GalleryPage):
 
         ipia = int(id[3:])
         if ipia in SMALL_GIF_PIAPAGES:
-            return PiaPage.PHOTOJOURNAL_URL + '/browse/' + id + '.gif'
+            return Galleries.PHOTOJOURNAL_URL + '/browse/' + id + '.gif'
         else:
-            return PiaPage.PHOTOJOURNAL_URL + '/jpeg/' + id + '.jpg'
+            return Galleries.PHOTOJOURNAL_URL + '/jpeg/' + id + '.jpg'
 
     @staticmethod
     def remote_medium_url_for_id(id, is_movie):
@@ -420,18 +410,17 @@ class PiaPage(GalleryPage):
         if ipia in MEDIUM_GIF_PIAPAGES:
             suffix = 'gif'
         elif is_movie:
-            return PiaPage.PHOTOJOURNAL_URL + '/animation/' + id + '.gif'
+            return Galleries.PHOTOJOURNAL_URL + '/animation/' + id + '.gif'
         else:
             suffix = 'jpg'
 
-        return PiaPage.PHOTOJOURNAL_URL + '/jpegMod/' + id + '_modest.jpg'
+        return Galleries.PHOTOJOURNAL_URL + '/jpegMod/' + id + '_modest.jpg'
 
     @staticmethod
     def local_page_url_for_id(id):
 
         id = PiaPage.get_id(id)
-        return '/' + GalleryPage.PRESS_RELEASES_SUBDIR_ + \
-                        'pages/%sxxx/%s.html' % (id[:5], id)
+        return '/' + GalleryPage.PRESS_RELEASES_SUBDIR_ + f'pages/{id[:5]}xxx/{id}.html'
 
     @staticmethod
     def local_thumbnail_url_for_id(id):
@@ -474,12 +463,6 @@ class PiaPage(GalleryPage):
 
         return '/' + GalleryPage.PRESS_RELEASES_SUBDIR_ + \
                         'medium/%sxxx/%s_med.%s' % (id[:5], id, suffix)
-
-    @staticmethod
-    def page_filepath_for_id(id):
-
-        return GalleryPage.DOCUMENTS_FILE_ROOT_[:-1] + \
-               PiaPage.local_page_url_for_id(id)
 
     @staticmethod
     def thumbnail_filepath_for_id(id):
@@ -526,9 +509,9 @@ class PiaPage(GalleryPage):
                 filepath = PiaPage.filepath_from_source(source)
 
             try:
-                with open(filepath, 'r') as file:
+                with open(filepath, 'r', encoding='utf-8') as file:
                     html = file.read()
-                return str(html.encode('ascii', 'xmlcharrefreplace'))
+                return str(html.encode('ascii', 'xmlcharrefreplace').decode('ascii'))
 
             # If local file not found
             except IOError:
@@ -551,7 +534,7 @@ class PiaPage(GalleryPage):
             PiaPage.BACK_TO_HOME_TEXT in req.text):
                 raise IOError('URL not found: "%s"' % url)
 
-        print 'Downloaded ' + url
+        print('Downloaded ' + url)
 
         # Replace non-ASCII characters that normally break HTML
         cleaned = ''.join(c if ord(c) < 128 else ' ' for c in req.text)
@@ -563,7 +546,7 @@ class PiaPage(GalleryPage):
             if not os.path.exists(parent):
                 os.mkdir(parent)
 
-            with open(filepath, 'w') as file:
+            with open(filepath, 'w', encoding='utf-8') as file:
                 file.write(cleaned)
 
         return cleaned
@@ -578,7 +561,7 @@ class PiaPage(GalleryPage):
             url = PiaPage.remote_thumbnail_url_for_id(id)
 
             try:
-                buffer = StringIO()
+                buffer = BytesIO()
                 c = pycurl.Curl()
                 c.setopt(c.URL, url)
                 c.setopt(c.WRITEDATA, buffer)
@@ -591,7 +574,7 @@ class PiaPage(GalleryPage):
                 except OSError:
                     pass
 
-                with open(path, 'w') as f:
+                with open(path, 'wb') as f:
                     f.write(buffer.getvalue())
 
             except KeyboardInterrupt:
@@ -604,14 +587,14 @@ class PiaPage(GalleryPage):
                     raise
 
             if verbose:
-                print 'Thumbnail downloaded for ' + id
+                print('Thumbnail downloaded for ' + id)
 
         path = PiaPage.small_filepath_for_id(id)
         if replace or not os.path.exists(path):
             url = PiaPage.remote_small_url_for_id(id)
 
             try:
-                buffer = StringIO()
+                buffer = BytesIO()
                 c = pycurl.Curl()
                 c.setopt(c.URL, url)
                 c.setopt(c.WRITEDATA, buffer)
@@ -624,7 +607,7 @@ class PiaPage(GalleryPage):
                 except OSError:
                     pass
 
-                with open(path, 'w') as f:
+                with open(path, 'wb') as f:
                     f.write(buffer.getvalue())
 
             except KeyboardInterrupt:
@@ -637,14 +620,14 @@ class PiaPage(GalleryPage):
                     raise
 
             if verbose:
-                print 'Small image downloaded for ' + id
+                print('Small image downloaded for ' + id)
 
         path = PiaPage.medium_filepath_for_id(id)
         if replace or not os.path.exists(path):
             url = PiaPage.remote_medium_url_for_id(id, is_movie)
 
             try:
-                buffer = StringIO()
+                buffer = BytesIO()
                 c = pycurl.Curl()
                 c.setopt(c.URL, url)
                 c.setopt(c.WRITEDATA, buffer)
@@ -657,7 +640,7 @@ class PiaPage(GalleryPage):
                 except OSError:
                     pass
 
-                with open(path, 'w') as f:
+                with open(path, 'wb') as f:
                     f.write(buffer.getvalue())
 
             except KeyboardInterrupt:
@@ -670,7 +653,7 @@ class PiaPage(GalleryPage):
                     raise
 
             if verbose:
-                print 'Medium image downloaded for ' + id
+                print('Medium image downloaded for ' + id)
 
     ############################################################################
     # Utilities
@@ -717,25 +700,25 @@ class PiaPage(GalleryPage):
     def get_title(self):
         """Return the title of the page. Example: Artemis Corona"""
 
-        title = GalleryPage.soup_as_text(self.soup.find('b'))
-        if title[:8] == self.id and title[8] == ':':
-            title = title[9:].strip()
-
-        return title
+        return GalleryPage.soup_as_text(self.soup.find('title'))
 
     def get_credit(self):
         """Return the Image Credit. Example: NASA/JPL"""
 
-        return GalleryPage.soup_as_text(self.soup.find_all('dd')[1])
+        credits = ''
+        credit_header = self.section_soup.find('span', text="Credits: ")
+        if credit_header is not None:
+            credits = credit_header.find_next_sibling()
+
+        return GalleryPage.soup_as_text(credits)
 
     def get_release_date(self):
         """Return the release date in yyyy-mm-dd format."""
 
-        date = GalleryPage.soup_as_text(self.soup.find_all('dd')[2])
-        date = str(date.strip())
-        date = date.replace('\\r','').replace('\\n','') # Fix HTML glitch
-        if not YMD_REGEX.match(date):
-            raise ValueError('No valid release date: ' + date)
+        date = ''
+        time_element = self.section_soup.find('time')
+        if time_element:
+            date = time_element.get('datetime', '')
 
         return date
 
@@ -745,14 +728,13 @@ class PiaPage(GalleryPage):
     def get_is_movie(self):
         """Return True if this is a movie; False if it is a still."""
 
-        test = self.soup.find('td', attrs={'bgcolor': '#cccccc'})
+        test = self.section_soup.find('td', attrs={'bgcolor': '#cccccc'})
         if not test: return False
 
         return 'movie' in test.text
 
     def get_is_color(self):
-        """Return True if this is in color; False if it is a grayscale or
-        unknown."""
+        """Return True if this is in color; False if it is a grayscale or unknown."""
 
         ipia = int(self.id[3:])
         try:
@@ -761,8 +743,7 @@ class PiaPage(GalleryPage):
             return False
 
     def get_is_grayscale(self):
-        """Return True if this is black and white; False if it is a in color or
-        unknown."""
+        """Return True if this is black and white; False if it is a in color or unknown."""
 
         ipia = int(self.id[3:])
         try:
@@ -770,27 +751,32 @@ class PiaPage(GalleryPage):
         except IndexError:
             return False
 
-    def get_caption_and_background(self):
-        """Return the caption and any identified background information as two
-        soups."""
+    def description_and_background(self):
+        """Return the description and any identified background information as two soups."""
 
         # Get the caption as soup
-        paragraphs_in_soup = list(self.soup.find('dd').children)
 
-        # Convert to strings and strip out empty strings 
-        paragraphs = [GalleryPage.soup_as_text(s) for s in paragraphs_in_soup]
+        header_element = self.section_soup.find('h2', string="Description")
 
-        filtered_paragraphs_in_soup = []
-        filtered_paragraphs = []
-        for k in range(len(paragraphs)):
-            if not paragraphs[k]: continue
+        if header_element is None:
+            return (self.section_soup, BeautifulSoup('', PARSER))
 
-            filtered_paragraphs_in_soup.append(paragraphs_in_soup[k])
-            filtered_paragraphs.append(paragraphs[k])
+        caption_as_soup = BeautifulSoup('', PARSER)
+        background_as_soup = BeautifulSoup('', PARSER)
 
-        background_indices = []
+        # loop thru the elements after "Description"
+        current_node = header_element.find_next_sibling()
+        while current_node is not None:
+            next_node = current_node.next_sibling
+            if isinstance(current_node, (Tag, NavigableString)):
+                caption_as_soup.append(current_node)
 
-        # Test the last eight paragraphs for background info
+            current_node = next_node
+
+       # background_indices = []
+
+       # Test the last eight paragraphs for background info
+        """ this code is currently under construction for individual PIA pages
         for k in range(1,len(filtered_paragraphs)):
 
             # Stop each paragraph search if any background substring is found
@@ -815,49 +801,53 @@ class PiaPage(GalleryPage):
 #                 if background_found:
 #                     print('WARNING, interleaved caption: ' + str(k) + ' ' + str(self.id))
                 caption_as_soup.append(filtered_paragraphs_in_soup[k])
+        """
 
         return (caption_as_soup, background_as_soup)
 
     def get_pia_tables(self):
-        """Gets all the information inside the table."""
+        """Get the information inside the table."""
 
         table = {}
         soup_table = {}
 
-        # The table rows are best recognized by the unique bgcolor
-        rows = self.soup.find_all('tr', attrs={'bgcolor':"#eeeeee"})
+        # With the exception of the release date, the table items are found via the class 'science-org*'
+        rows = self.section_soup.select('div[class*="science-org"]')
         for row in rows:
-            columns = row.find_all('td')
-            soup_value = columns[1]
+            soup_value = row.find_all('ul')
+            columns = row.find_all('li')
 
             pair = []
             for column in columns:
+                contents = column.find('a')
+                if contents is not None:
+                    text = contents.text
+                else:
+                    text = column.text
 
-              # Clean up Unicode
-              text = column.text
-              text = str(''.join([c if ord(c) < 128 else ' ' for c in text]))
-              text = text.strip()
+                # Clean up Unicode
+                text = str(''.join([c if c.isascii() else ' ' for c in text]))
+                text = text.strip()
 
-              text = text.replace('\r', '\n')
-              items = text.split('\n')
+                text = text.replace('\r', '\n')
+                items = text.split('\n')
 
-              new_items = []
-              for k in range(len(items)):
-                item = items[k]
-                item = item.strip()
-                item = item.replace('\\r','').replace('\\n','') # Fix HTML
-                item = item.strip()
-                if not item: continue
+                new_items = []
+                for item in items:
+                    item = item.strip()
+                    item = item.replace('\\r','').replace('\\n','').strop() # Fix HTML
+                    if not item:
+                        continue
 
-                parts = item.split(',')
-                for part in parts:
+                for part in item.split(','):
                     new_items.append(part.strip())
 
-              pair.append(new_items)
+                pair.append(new_items)
 
-            key = pair[0][0].replace(':','')
-            if pair[1]:
-                table[key] = pair[1]
+            heading_element = row.find('span')
+            key = heading_element.get_text().replace(':','').replace('(s)','')
+            if pair[0]:
+                table[key] = pair[0]
                 soup_table[key] = soup_value
 
         self.pia_table = table
@@ -882,10 +872,12 @@ class PiaPage(GalleryPage):
     def jekyll_filepath_for_id(id):
 
         id = PiaPage.get_id(id)
+        # uncomment for testing
+        # return f'c:/seti/rms-website/website/galleries/{id[:5]}xxx/{id}.html'
         return PiaPage.JEKYLL_ROOT_ + GalleryPage.PRESS_RELEASES_SUBDIR_ + \
                     'pages/%sxxx/%s.html' % (id[:5], id)
 
-    pattern = '"https?://' + PHOTOJOURNAL_DOMAIN + '/catalog/(PIA..)(...)"'
+    pattern = '"https?://' + Galleries.PHOTOJOURNAL_DOMAIN + '/catalog/(PIA..)(...)\"'
     XREF_BEFORE = re.compile(pattern)
     XREF_AFTER  = r'"/%spages/\1xxx/\1\2.html"' % \
                                     GalleryPage.PRESS_RELEASES_SUBDIR_
@@ -922,7 +914,7 @@ class PiaPage(GalleryPage):
                                 neighbors=neighbors)
 
             if verbose:
-                print 'Jekyll file written: ' + path
+                print('Jekyll file written: ' + path)
 
 ################################################################################
 # Catalog support functions
@@ -948,17 +940,17 @@ def build_catalog(incremental=True, verbose=True, download=False, path=None,
 
     if incremental:
         try:
-            with open(path) as f:
+            with open(path, 'rb') as f:
                 piapages = pickle.load(f)
 
             if verbose:
-                print 'catalog loaded'
+                print('catalog loaded')
 
             updating = True
-        except:
+        except Exception:
             piapages = {}
             if verbose:
-                print 'starting new catalog'
+                print('starting new catalog')
 
             updating = False
     else:
@@ -976,10 +968,10 @@ def build_catalog(incremental=True, verbose=True, download=False, path=None,
 
         # If not updating, print every 100th number
         if more_verbose:
-            print pia
+            print(pia)
         elif verbose and not updating:
             if pia % 100 == 0:
-                print pia   # Otherwise, print every 100th
+                print(pia)   # Otherwise, print every 100th
 
         # Try to read the PiaPage
         try:
@@ -989,7 +981,7 @@ def build_catalog(incremental=True, verbose=True, download=False, path=None,
         except IOError:
             continue
         except ValueError as e:
-            print '**** Error in PIA%05d' % pia, e
+            print('**** Error in PIA%05d' % pia, e)
             continue
 
         # Always skip non-planetary
@@ -997,7 +989,7 @@ def build_catalog(incremental=True, verbose=True, download=False, path=None,
             continue
 
         if verbose and updating:
-            print pia       # If updating, print every new ID
+            print(pia)       # If updating, print every new ID
 
         piapages[p.id] = p
 
@@ -1025,7 +1017,7 @@ def load_catalog(path=None):
     catalog = storedpage.load_catalog(path)
 
     piapages = {}
-    for (key, value) in catalog.iteritems():
+    for (key, value) in catalog.items():
         piapages[key] = PiaPage(value.id, _dict=value.__dict__)
 
     return piapages

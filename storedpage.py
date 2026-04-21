@@ -27,7 +27,7 @@ class StoredPage(GalleryPage):
 
         # Make a copy if necessary
         if isinstance(page, dict):
-            for (key, value) in page.iteritems():
+            for (key, value) in page.items():
                 self.__dict__[key] = value
 
             return
@@ -85,25 +85,25 @@ def save_catalog(catalog, filepath):
 
     # Convert to dictionaries
     dicts = {}
-    for (key, page) in catalog.iteritems():
+    for (key, page) in catalog.items():
         if not isinstance(page, StoredPage):
             page = StoredPage(page)
 
         dicts[key] = page.__dict__
 
     # Save pickle file
-    with open(filepath, 'w') as f:
+    with open(filepath, 'wb') as f:
         pickle.dump(dicts, f)
 
 def load_catalog(filepath):
     """Load a dictionary of StoredPage objects from a pickle file.
     """
 
-    with open(filepath) as f:
+    with open(filepath, 'rb') as f:
         dicts = pickle.load(f)
 
     catalog = {}
-    for (key, value) in dicts.iteritems():
+    for (key, value) in dicts.items():
         catalog[key] = StoredPage(value)
 
     return catalog
